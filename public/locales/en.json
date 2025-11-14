@@ -2,5 +2,26 @@
   "i18n": {
     "header": "Application supports i18n",
     "footer": "You can select a different language from the dropdown menu."
+  },
+  "login": {
+    "sectionTitle": "Login",
+    "phoneHeader": "Phone Number",
+    "phonePlaceholder": "+6281234567890",
+    "phoneError": "Invalid phone number",
+    "clear": "Clear",
+    "login": "Login",
+    "sendCode": "Send Code",
+    "verifyTitle": "Verify Code",
+    "verifyDescription": "We sent a verification code to {phone}",
+    "enterCode": "Enter the code",
+    "codeLabel": "Verification Code",
+    "codeSent": "Code sent successfully",
+    "invalidCode": "Please enter a valid 5-digit code",
+    "verify": "Verify",
+    "back": "Back",
+    "loginSuccess": "Login successful",
+    "sendCodeError": "Failed to send code",
+    "verifyCodeError": "Failed to verify code",
+    "networkError": "Cannot connect to server"
   }
 }
