@@ -8,7 +8,4 @@
  *
  * 🟢 You can import this file directly.
  */
-export type * from './models/User'
-export type * from './models/AIConfigure'
-export type * from './models/KnowledgeSource'
 export type * from './commonInputTypes'

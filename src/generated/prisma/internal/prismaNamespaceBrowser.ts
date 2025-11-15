@@ -49,9 +49,7 @@ export const AnyNull = runtime.objectEnumValues.instances.AnyNull
 
 
 export const ModelName = {
-  User: 'User',
-  AIConfigure: 'AIConfigure',
-  KnowledgeSource: 'KnowledgeSource'
+
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -68,86 +66,4 @@ export const TransactionIsolationLevel = runtime.makeStrictEnum({
 } as const)
 
 export type TransactionIsolationLevel = (typeof TransactionIsolationLevel)[keyof typeof TransactionIsolationLevel]
-
-
-export const UserScalarFieldEnum = {
-  id: 'id',
-  telegramUserId: 'telegramUserId',
-  phoneNumber: 'phoneNumber',
-  session: 'session',
-  initDataRaw: 'initDataRaw',
-  initDataUser: 'initDataUser',
-  initDataChat: 'initDataChat',
-  customPrompt: 'customPrompt',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt',
-  userbotEnabled: 'userbotEnabled'
-} as const
-
-export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
-
-
-export const AIConfigureScalarFieldEnum = {
-  id: 'id',
-  userId: 'userId',
-  tool: 'tool',
-  prompt: 'prompt',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt',
-  knowledgeSourceId: 'knowledgeSourceId'
-} as const
-
-export type AIConfigureScalarFieldEnum = (typeof AIConfigureScalarFieldEnum)[keyof typeof AIConfigureScalarFieldEnum]
-
-
-export const KnowledgeSourceScalarFieldEnum = {
-  id: 'id',
-  content: 'content',
-  metadata: 'metadata',
-  createdAt: 'createdAt',
-  updatedAt: 'updatedAt'
-} as const
-
-export type KnowledgeSourceScalarFieldEnum = (typeof KnowledgeSourceScalarFieldEnum)[keyof typeof KnowledgeSourceScalarFieldEnum]
-
-
-export const SortOrder = {
-  asc: 'asc',
-  desc: 'desc'
-} as const
-
-export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
-
-
-export const NullableJsonNullValueInput = {
-  DbNull: DbNull,
-  JsonNull: JsonNull
-} as const
-
-export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
-
-
-export const QueryMode = {
-  default: 'default',
-  insensitive: 'insensitive'
-} as const
-
-export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
-
-
-export const JsonNullValueFilter = {
-  DbNull: DbNull,
-  JsonNull: JsonNull,
-  AnyNull: AnyNull
-} as const
-
-export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
-
-
-export const NullsOrder = {
-  first: 'first',
-  last: 'last'
-} as const
-
-export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
 
