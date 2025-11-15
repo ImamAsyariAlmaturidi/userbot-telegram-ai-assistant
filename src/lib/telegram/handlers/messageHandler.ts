@@ -4,50 +4,64 @@ import { EntityLike } from "telegram/define";
 import { SendMessageParams } from "telegram/client/messages";
 import type { MessageContext, AgentResponse } from "../../../../types";
 
-/**
- * Message handler interface
- */
+/** Message handler interface */
 export interface MessageHandler {
   handle(context: MessageContext): Promise<AgentResponse | null>;
 }
+async function resolveEntity(client: TelegramClient, message: any) {
+  // 1. Kalo sender udah ada → langsung return
+  if (message.sender) return message.sender;
 
-/**
- * Split message berdasarkan "!!!" marker yang ditambahkan oleh AI
- * Hanya split berdasarkan "!!!" marker - tidak ada fallback, AI harus handle dengan benar
- */
-function splitMessageByMarker(text: string): string[] {
-  if (!text || text.length === 0) {
-    return [];
+  const rawId = message.senderId;
+  if (!rawId) return null;
+
+  // 2. Normalize BIGINT → number/string
+  let normalized: any = rawId;
+
+  if (typeof rawId === "bigint") {
+    normalized = Number(rawId);
   }
 
-  const trimmedText = text.trim();
-
-  // Check apakah ada "!!!" marker
-  if (!text.includes("!!!")) {
-    // Tidak ada marker - return as-is
-    // AI harus sudah menambahkan "!!!" untuk message panjang
-    return [trimmedText];
+  if (typeof rawId === "object" && rawId._ === "peerUser") {
+    normalized = rawId.userId;
   }
 
-  // Split berdasarkan "!!!" marker
-  const chunks = text
-    .split("!!!")
-    .map((chunk) => chunk.trim())
-    .filter((chunk) => chunk.length > 0);
+  // 3. Try getInputEntity (paling aman)
+  try {
+    return await client.getInputEntity(normalized);
+  } catch {}
 
-  // Jika setelah split hanya ada 1 chunk, berarti tidak ada marker yang valid
-  if (chunks.length <= 1) {
-    return [trimmedText];
-  }
+  // 4. Try getEntity (kadang sukses kalo penuh)
+  try {
+    return await client.getEntity(normalized);
+  } catch {}
 
-  // Return chunks as-is - AI harus sudah memastikan setiap chunk <= 4000 karakter
-  return chunks;
+  // 5. Last fallback: scan dialog
+  try {
+    const dialogs = await client.getDialogs({});
+    const found = dialogs.find(
+      (d: any) => String(d.entity?.id) === String(normalized)
+    );
+    if (found) return found.entity;
+  } catch {}
+
+  return null;
 }
 
-/**
- * Safely send a message by resolving the entity in all possible ways.
- * Splits messages based on "!!!" marker added by AI, or sends as-is if no marker.
- */
+/** Split AI output by !!! marker */
+function splitMessageByMarker(text: string): string[] {
+  if (!text) return [];
+  if (!text.includes("!!!")) return [text.trim()];
+
+  const chunks = text
+    .split("!!!")
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
+
+  return chunks.length <= 1 ? [text.trim()] : chunks;
+}
+
+/** Send safely + chunking */
 async function safeSendMessage(
   client: TelegramClient,
   message: any,
@@ -56,21 +70,17 @@ async function safeSendMessage(
   try {
     let entity: EntityLike | undefined;
 
-    // 1️⃣ Try to use sender directly (already a full entity if cached)
     if (message.sender) {
       entity = message.sender;
-    } else {
-      // 2️⃣ Try getInputEntity — safer for IDs or peers
+    }
+
+    if (!entity) {
       try {
         entity = await client.getInputEntity(message.senderId);
       } catch {
-        // 3️⃣ Try getEntity — if still not found, fetch from Telegram
         try {
           entity = await client.getEntity(message.senderId);
         } catch {
-          console.warn(
-            "⚠️ Entity not cached, trying to fetch via peer dialog..."
-          );
           const dialogs = await client.getDialogs({});
           const found = dialogs.find(
             (d: any) => String(d.entity.id) === String(message.senderId)
@@ -81,59 +91,30 @@ async function safeSendMessage(
     }
 
     if (!entity) {
-      console.error(
-        "❌ Failed to resolve entity for sender:",
-        message.senderId
-      );
+      console.error("Failed to resolve entity", message.senderId);
       return;
     }
 
-    // Split message berdasarkan "!!!" marker dari AI
     const chunks = splitMessageByMarker(text);
-
-    console.log(
-      `📤 Sending ${chunks.length} message bubble(s) (total: ${text.length} chars)`
-    );
-
-    // Send each chunk as a separate message
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
       try {
-        console.log(
-          `📤 Sending bubble ${i + 1}/${chunks.length} (${chunk.length} chars)`
-        );
         await client.sendMessage(entity, {
-          message: chunk,
+          message: chunks[i],
         } as SendMessageParams);
-        console.log(`✅ Bubble ${i + 1}/${chunks.length} sent successfully`);
 
-        // Small delay between messages to avoid rate limiting
         if (i < chunks.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          await new Promise((r) => setTimeout(r, 300));
         }
-      } catch (chunkError: any) {
-        console.error(
-          `❌ Failed to send bubble ${i + 1}/${chunks.length}:`,
-          chunkError
-        );
-        // Continue sending remaining chunks even if one fails
-        if (chunkError.errorMessage?.includes("MESSAGE_TOO_LONG")) {
-          console.warn(
-            `⚠️ Bubble ${i + 1} still too long (${
-              chunk.length
-            } chars), this should not happen!`
-          );
-        }
+      } catch (err) {
+        console.error("Bubble failed:", err);
       }
     }
   } catch (err) {
-    console.error("❌ Failed to send message:", err);
+    console.error("Send failed:", err);
   }
 }
 
-/**
- * Creates a message event handler for Telegram client
- */
+/** Main message handler creator */
 export function createMessageHandler(
   client: TelegramClient,
   handler: MessageHandler,
@@ -143,102 +124,56 @@ export function createMessageHandler(
     const message = event.message;
     const text = message.message?.trim();
 
-    // Ignore empty messages and self messages
+    // ignore self / kosong
     if (!text || message.out) return;
 
-    // Check if sender is a bot (to prevent loops between userbots and bot messages)
-    let isBot = false;
+    /** BLOCK BOT SENDER */
     try {
-      const msgAny = message as any;
-      if (msgAny.sender) {
-        const sender = msgAny.sender as any;
-        if (
-          sender.bot === true ||
-          (sender._ === "user" && sender.bot === true)
-        ) {
-          isBot = true;
-        }
-      }
-    } catch (err) {
-      // If error checking bot status, continue processing
-    }
-
-    if (isBot) {
-      console.log(
-        `🚫 Ignoring message from bot (senderId: ${message.senderId})`
-      );
-      return;
-    }
-
-    // Ignore messages from other userbots (to prevent loops between userbots)
-    if (ownerUserId) {
-      const { userbotStore } = await import("../userbotStore");
-      const senderIdStr = String(message.senderId || "");
-      if (
-        userbotStore.hasUserbotRunning(senderIdStr) &&
-        senderIdStr !== ownerUserId
-      ) {
-        console.log(
-          `🚫 Ignoring message from another userbot (senderId: ${senderIdStr})`
-        );
+      const s = (message as any).sender;
+      if (s && (s.bot === true || (s._ === "user" && s.bot === true))) {
         return;
       }
+    } catch {}
+
+    /** IGNORE OTHER USERBOT LOOP */
+    if (ownerUserId) {
+      const { userbotStore } = await import("../userbotStore");
+      const sid = String(message.senderId || "");
+      if (userbotStore.hasUserbotRunning(sid) && sid !== ownerUserId) return;
     }
 
-    // Ignore messages from groups/channels (only process private chats)
+    /** Only handle private chat */
     const chatId = message.chatId;
     if (!chatId) return;
 
-    const chatIdNum =
-      typeof chatId === "bigint" ? Number(chatId) : Number(chatId);
+    const cid = typeof chatId === "bigint" ? Number(chatId) : Number(chatId);
+    if (cid <= 0) return;
 
-    if (chatIdNum <= 0) return;
-
-    // Get sender info (username, firstName, lastName)
-    const msgAny = message as any;
-    let senderUsername: string | undefined;
-    let senderFirstName: string | undefined;
-    let senderLastName: string | undefined;
+    /** Fetch sender info (FULL PROFILE FIX) */
+    let senderEntity: any = null;
 
     try {
-      if (msgAny.sender) {
-        const sender = msgAny.sender as any;
-
-        // Debug: log sender object structure
-        console.log("🔍 Sender object keys:", Object.keys(sender));
-        console.log("🔍 Sender data:", {
-          username: sender.username,
-          firstName: sender.firstName,
-          first_name: sender.first_name,
-          lastName: sender.lastName,
-          last_name: sender.last_name,
-        });
-
-        // Try both camelCase and snake_case
-        senderUsername = sender.username || undefined;
-        senderFirstName = sender.firstName || sender.first_name || undefined;
-        senderLastName = sender.lastName || sender.last_name || undefined;
-      }
-    } catch (err) {
-      console.error("⚠️ Error getting sender info:", err);
+      senderEntity = await resolveEntity(client, message);
+    } catch {
+      senderEntity = (message as any).sender || null;
     }
+
+    const senderUsername =
+      senderEntity?.username || senderEntity?.usernames?.[0]?.username;
+    const senderFirstName = senderEntity?.firstName || senderEntity?.first_name;
+    const senderLastName = senderEntity?.lastName || senderEntity?.last_name;
 
     const context: MessageContext = {
       chatId: String(chatId),
       senderId: String(message.senderId || ""),
       message: text,
-      isOutgoing: message.out || false,
+      isOutgoing: false,
       senderUsername,
       senderFirstName,
       senderLastName,
     };
 
-    const senderName = senderFirstName || senderUsername || context.senderId;
-    console.log(
-      `📩 New private message from ${senderName} (${context.senderId}): ${text}`
-    );
-
-    // Check if userbot is enabled for the owner
+    /** Userbot enable check */
     if (ownerUserId) {
       try {
         const { prisma } = await import("@/lib/prisma");
@@ -249,32 +184,20 @@ export function createMessageHandler(
           select: { userbotEnabled: true },
         });
 
-        if (!user || !user.userbotEnabled) {
-          console.log(
-            `🚫 Userbot is disabled for owner ${ownerUserId}, ignoring message`
-          );
-          return;
-        }
+        if (!user?.userbotEnabled) return;
       } catch (err) {
-        console.error("⚠️ Error checking userbot status:", err);
-        // Continue processing if check fails
+        console.error("Userbot toggle check failed:", err);
       }
     }
 
+    /** Process */
     try {
       const response = await handler.handle(context);
-
       if (response?.content) {
-        console.log(`💬 Replying with ${response.content.length} characters`);
-        console.log(
-          `💬 First 200 chars: ${response.content.substring(0, 200)}...`
-        );
         await safeSendMessage(client, message, response.content);
-      } else {
-        console.warn("⚠️ No response content from handler");
       }
     } catch (err) {
-      console.error("❌ Error handling message:", err);
+      console.error("Handler error:", err);
     }
   }, new NewMessage({ incoming: true }));
 }
