@@ -7,16 +7,13 @@ import { initDataState } from "@telegram-apps/sdk-react";
 import { useSignal } from "@telegram-apps/sdk-react";
 import { useRouter } from "next/navigation";
 import { getAuthStatus } from "@/core/api/auth";
-
-const DEFAULT_PROMPT =
-  "Kamu adalah Assistant dari STAR, kamu membantu kebutuhan seseorang yang chat kamu melalui platform telegram, jika pertanyaan general gunakan web search tool";
+import { PromptTab } from "./components/PromptTab";
+import { KnowledgeSourceTab } from "./components/KnowledgeSourceTab";
 
 export default function DashboardPage() {
   const router = useRouter();
   const initData = useSignal(initDataState);
-  const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);
+  const [activeTab, setActiveTab] = useState("prompt");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [snack, setSnack] = useState<{
     open: boolean;
@@ -28,15 +25,17 @@ export default function DashboardPage() {
   const userName =
     initData?.user?.first_name || initData?.user?.username || "User";
 
-  // Check auth status on mount
+  // Check auth status on mount - harus ada session di database
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const status = await getAuthStatus();
-        if (!status?.isAuthorized) {
+        if (!status?.isAuthorized || !status?.sessionString) {
+          console.log("[Dashboard] No session found, redirecting to login");
           router.push("/login");
           return;
         }
+        console.log("[Dashboard] Auth check passed");
       } catch (error) {
         console.error("Error checking auth:", error);
         router.push("/login");
@@ -49,31 +48,8 @@ export default function DashboardPage() {
     checkAuth();
   }, [router]);
 
-  // Fetch existing custom prompt
-  useEffect(() => {
-    if (!telegramUserId || checkingAuth) return;
-
-    const fetchPrompt = async () => {
-      try {
-        const response = await fetch(
-          `/api/users/prompt?telegram_user_id=${telegramUserId}`
-        );
-        const data = await response.json();
-
-        if (data.success && data.custom_prompt) {
-          setCustomPrompt(data.custom_prompt);
-        }
-      } catch (error) {
-        console.error("Error fetching prompt:", error);
-      } finally {
-        setFetching(false);
-      }
-    };
-
-    fetchPrompt();
-  }, [telegramUserId, checkingAuth]);
-
   // Save user data and init data when init data is available
+  // Hanya update init data, tidak reset prompt
   useEffect(() => {
     if (!initData || !telegramUserId || checkingAuth) return;
 
@@ -102,57 +78,7 @@ export default function DashboardPage() {
     saveUserData();
   }, [initData, telegramUserId, checkingAuth]);
 
-  const handleSave = async () => {
-    if (!telegramUserId) {
-      setSnack({
-        open: true,
-        text: "User ID tidak ditemukan. Silakan login terlebih dahulu.",
-        tone: "critical",
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch("/api/users/prompt", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          telegram_user_id: telegramUserId,
-          custom_prompt: customPrompt.trim() || DEFAULT_PROMPT,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setSnack({
-          open: true,
-          text: "Prompt berhasil disimpan!",
-          tone: "positive",
-        });
-      } else {
-        throw new Error(data.error || "Gagal menyimpan prompt");
-      }
-    } catch (error: any) {
-      console.error("Error saving prompt:", error);
-      setSnack({
-        open: true,
-        text: error.message || "Gagal menyimpan prompt",
-        tone: "critical",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReset = () => {
-    setCustomPrompt(DEFAULT_PROMPT);
-  };
-
-  if (checkingAuth || fetching) {
+  if (checkingAuth) {
     return (
       <Page>
         <div className="min-h-screen flex items-center justify-center">
@@ -204,7 +130,7 @@ export default function DashboardPage() {
                   Selamat Datang, {userName}!
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Kelola prompt AI assistant Anda
+                  Kelola AI assistant Anda
                 </p>
               </div>
             </div>
@@ -213,83 +139,54 @@ export default function DashboardPage() {
 
         {/* Main Content */}
         <div className="max-w-4xl mx-auto px-4 pt-8">
-          {/* Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 space-y-6">
-            {/* Section Header */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Customize AI Prompt
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Atur prompt untuk AI assistant. Prompt ini akan digunakan untuk
-                merespons pesan di Telegram.
-              </p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+            {/* Tab Navigation */}
+            <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setActiveTab("prompt")}
+                className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+                  activeTab === "prompt"
+                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                Prompt
+              </button>
+              <button
+                onClick={() => setActiveTab("knowledge")}
+                className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+                  activeTab === "knowledge"
+                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                Knowledge Base
+              </button>
             </div>
 
-            {/* Textarea */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Prompt AI Assistant
-              </label>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder={DEFAULT_PROMPT}
-                disabled={loading}
-                rows={10}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-y disabled:opacity-50 disabled:cursor-not-allowed"
+            {/* Tab Content */}
+            {activeTab === "prompt" && (
+              <PromptTab
+                telegramUserId={telegramUserId}
+                onError={(error) =>
+                  setSnack({ open: true, text: error, tone: "critical" })
+                }
+                onSuccess={(message) =>
+                  setSnack({ open: true, text: message, tone: "positive" })
+                }
               />
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                {customPrompt.length} karakter
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                onClick={handleSave}
-                disabled={loading}
-                className="flex-1"
-              >
-                {loading ? <Spinner size="s" /> : "Simpan Prompt"}
-              </Button>
-              <Button
-                onClick={handleReset}
-                disabled={loading}
-                mode="outline"
-                className="flex-1"
-              >
-                Reset ke Default
-              </Button>
-            </div>
-          </div>
-
-          {/* Info Card */}
-          <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-            <div className="flex items-start space-x-3">
-              <svg
-                className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                  Tips
-                </p>
-                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  Buat prompt yang jelas dan spesifik. Prompt yang baik akan
-                  membantu AI memberikan respons yang lebih akurat dan relevan.
-                </p>
-              </div>
-            </div>
+            )}
+            {activeTab === "knowledge" && (
+              <KnowledgeSourceTab
+                telegramUserId={telegramUserId}
+                onError={(error) =>
+                  setSnack({ open: true, text: error, tone: "critical" })
+                }
+                onSuccess={(message) =>
+                  setSnack({ open: true, text: message, tone: "positive" })
+                }
+              />
+            )}
           </div>
         </div>
       </div>

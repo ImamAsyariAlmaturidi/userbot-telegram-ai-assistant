@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button, Spinner, Section } from "@telegram-apps/telegram-ui";
 
 const DEFAULT_PROMPT =
@@ -8,7 +8,6 @@ const DEFAULT_PROMPT =
 
 interface PromptTabProps {
   telegramUserId: string | number;
-  initialPrompt?: string;
   onSave?: (prompt: string) => void;
   onError?: (error: string) => void;
   onSuccess?: (message: string) => void;
@@ -16,13 +15,37 @@ interface PromptTabProps {
 
 export function PromptTab({
   telegramUserId,
-  initialPrompt = DEFAULT_PROMPT,
   onSave,
   onError,
   onSuccess,
 }: PromptTabProps) {
-  const [customPrompt, setCustomPrompt] = useState(initialPrompt);
+  const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+
+  // Fetch existing custom prompt
+  useEffect(() => {
+    if (!telegramUserId) return;
+
+    const fetchPrompt = async () => {
+      try {
+        const response = await fetch(
+          `/api/users/prompt?telegram_user_id=${telegramUserId}`
+        );
+        const data = await response.json();
+
+        if (data.success && data.custom_prompt) {
+          setCustomPrompt(data.custom_prompt);
+        }
+      } catch (error) {
+        console.error("Error fetching prompt:", error);
+      } finally {
+        setFetching(false);
+      }
+    };
+
+    fetchPrompt();
+  }, [telegramUserId]);
 
   const handleSave = async () => {
     if (!telegramUserId) {
@@ -62,6 +85,14 @@ export function PromptTab({
   const handleReset = () => {
     setCustomPrompt(DEFAULT_PROMPT);
   };
+
+  if (fetching) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Spinner size="m" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

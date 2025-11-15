@@ -31,7 +31,23 @@
 
 **Build & Start:**
 
-**Option 1: Menggunakan Bun (Recommended)**
+**Option 1: Menggunakan Node.js + tsx (Recommended untuk Render)**
+
+⚠️ **Bun tidak reliable di Render**, gunakan Node.js + tsx:
+
+- **Runtime:** `Node`
+- **Build Command:**
+  ```bash
+  npm install && npx prisma generate
+  ```
+  (PENTING: `prisma generate` harus dijalankan untuk generate Prisma Client untuk Linux)
+- **Start Command:**
+  ```bash
+  npm run bot:node
+  ```
+  (Script `bot:node` sudah ditambahkan di package.json, `tsx` sudah di dependencies)
+
+**Option 2: Menggunakan Bun (Jika mau coba)**
 
 - **Runtime:** `Node`
 - **Build Command:**
@@ -42,21 +58,9 @@
   ```
 - **Start Command:**
   ```bash
-  $HOME/.bun/bin/bun run bot/run.ts
+  /opt/render/.bun/bin/bun run bot/run.ts
   ```
-
-**Option 2: Menggunakan Node.js + tsx (Jika Bun tidak work)**
-
-- **Runtime:** `Node`
-- **Build Command:**
-  ```bash
-  npm install
-  ```
-- **Start Command:**
-  ```bash
-  npm run bot:node
-  ```
-  (Script `bot:node` sudah ditambahkan di package.json)
+  (Gunakan absolute path `/opt/render/.bun/bin/bun` bukan `$HOME/.bun/bin/bun`)
 
 ### 4. Setup Environment Variables
 

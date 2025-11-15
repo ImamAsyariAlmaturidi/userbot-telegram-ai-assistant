@@ -34,16 +34,19 @@ export async function POST(req: NextRequest) {
       select: { id: true, telegramUserId: true },
     });
 
-    const userData = {
-      phoneNumber: phone_number || "",
-      initDataRaw: init_data_raw || null,
-      initDataUser: init_data_user || null,
-      initDataChat: init_data_chat || null,
-    };
+    // Hanya update field yang dikirim, jangan reset prompt atau session
+    const userData: any = {};
+    if (phone_number !== undefined) userData.phoneNumber = phone_number || "";
+    if (init_data_raw !== undefined)
+      userData.initDataRaw = init_data_raw || null;
+    if (init_data_user !== undefined)
+      userData.initDataUser = init_data_user || null;
+    if (init_data_chat !== undefined)
+      userData.initDataChat = init_data_chat || null;
 
     let result;
     if (existingUser) {
-      // Update existing user
+      // Update existing user - hanya field yang dikirim
       console.log(
         `[API] Updating existing user with telegram_user_id: ${userId}`
       );
@@ -63,7 +66,10 @@ export async function POST(req: NextRequest) {
         data: {
           telegramUserId: userId,
           session: `pending_${userId}`, // Placeholder, will be updated on login
-          ...userData,
+          phoneNumber: phone_number || "",
+          initDataRaw: init_data_raw || null,
+          initDataUser: init_data_user || null,
+          initDataChat: init_data_chat || null,
         },
         select: {
           telegramUserId: true,
