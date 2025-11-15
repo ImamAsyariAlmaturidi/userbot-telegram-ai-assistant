@@ -60,7 +60,7 @@ async function loadAndStartUserbots() {
     });
 
     // Filter out users without session
-    const usersWithSession = users.filter((u) => u.session !== null);
+    const usersWithSession = users.filter((u: any) => u.session !== null);
 
     console.log(
       `📊 Found ${usersWithSession.length} enabled user(s) with session`
@@ -148,7 +148,7 @@ async function watchUserbotStatus() {
       });
 
       // Filter out users without session
-      const usersWithSession = users.filter((u) => u.session !== null);
+      const usersWithSession = users.filter((u: any) => u.session !== null);
 
       // Start userbots that are not running yet
       for (const user of usersWithSession) {
