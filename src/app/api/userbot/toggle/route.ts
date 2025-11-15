@@ -73,26 +73,13 @@ export async function POST(req: NextRequest) {
       } for telegram_user_id: ${userId}`
     );
 
-    // If enabling, start userbot. If disabling, stop userbot
-    try {
-      if (enabled) {
-        // Start userbot
-        const { startUserbot } = await import("@/lib/telegram/userbot");
-        await startUserbot({ sessionString: sessionCookie });
-        console.log(`[API] Userbot started for telegram_user_id: ${userId}`);
-      } else {
-        // Stop userbot
-        const { stopUserbot } = await import("@/lib/telegram/userbot");
-        await stopUserbot(sessionCookie);
-        console.log(`[API] Userbot stopped for telegram_user_id: ${userId}`);
-      }
-    } catch (err) {
-      console.error(
-        `[API] Error ${enabled ? "starting" : "stopping"} userbot:`,
-        err
-      );
-      // Don't fail the request if userbot start/stop fails
-    }
+    // NOTE: Userbot start/stop dilakukan oleh Render bot worker (bot/run.ts)
+    // Bot worker akan monitor perubahan status di database setiap 30 detik
+    // dan start/stop userbot sesuai dengan status userbotEnabled
+    // Jangan start/stop userbot dari Vercel karena:
+    // 1. Vercel adalah serverless - tidak cocok untuk long-running process
+    // 2. Userbot perlu jalan persistent di Render bot worker
+    // 3. Bot worker sudah punya watch function yang handle start/stop
 
     return NextResponse.json({
       success: true,

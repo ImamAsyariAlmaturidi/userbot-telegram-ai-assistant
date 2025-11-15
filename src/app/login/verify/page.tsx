@@ -15,11 +15,13 @@ import {
 import { SectionFooter } from "@telegram-apps/telegram-ui/dist/components/Blocks/Section/components/SectionFooter/SectionFooter";
 import { useTranslations } from "next-intl";
 import { verifyLoginCode, getAuthStatus } from "@/core/api/auth";
+import { initDataState, useSignal } from "@telegram-apps/sdk-react";
 
 function VerifyPageContent() {
   const t = useTranslations("login");
   const router = useRouter();
   const searchParams = useSearchParams();
+  const initData = useSignal(initDataState);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [phoneCode, setPhoneCode] = useState<number[]>([]);
   const [password, setPassword] = useState("");
@@ -61,7 +63,7 @@ function VerifyPageContent() {
     checkAuth();
   }, [router]);
 
-  // Get phone number from URL params or sessionStorage
+  // Get phone number from URL params or sessionStorage and check if user exists
   useEffect(() => {
     if (checkingAuth) return; // Wait for auth check to complete
 
@@ -75,12 +77,68 @@ function VerifyPageContent() {
     if (phone) {
       setPhoneNumber(phone);
       console.log("[VerifyPage] Phone number loaded:", phone);
+
+      // Check if user exists in database with valid session
+      const checkUserExists = async () => {
+        const telegramUserId = initData?.user?.id?.toString();
+        if (telegramUserId) {
+          try {
+            const checkRes = await fetch("/api/users/check", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                telegram_user_id: telegramUserId,
+                phone_number: phone,
+              }),
+            });
+
+            const checkData = await checkRes.json();
+            if (checkData?.exists && checkData?.hasSession) {
+              // User exists with valid session, restore session and redirect
+              console.log(
+                "[VerifyPage] User exists in database, restoring session"
+              );
+              try {
+                // Restore session cookie
+                await fetch("/api/auth/restore-session", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  credentials: "include",
+                  body: JSON.stringify({
+                    telegram_user_id: telegramUserId,
+                  }),
+                });
+              } catch (err) {
+                console.error("[VerifyPage] Error restoring session:", err);
+              }
+
+              setSnack({
+                open: true,
+                text: "Anda sudah terdaftar, mengarahkan ke dashboard...",
+                tone: "positive",
+              });
+              setTimeout(() => {
+                router.push("/dashboard");
+              }, 1000);
+              return;
+            }
+          } catch (err) {
+            console.error("[VerifyPage] Error checking user:", err);
+          }
+        }
+      };
+
+      checkUserExists();
     } else {
       // No phone number found, redirect back to login
       console.warn("[VerifyPage] No phone number found, redirecting to login");
       router.push("/login");
     }
-  }, [searchParams, router, checkingAuth]);
+  }, [searchParams, router, checkingAuth, initData]);
 
   async function handleVerifyCode() {
     const codeString = phoneCode.join("");
