@@ -111,7 +111,6 @@ export default function DashboardPage() {
 
     saveUserData();
   }, [initData, telegramUserId, checkingAuth]);
-
   const handleToggleUserbot = async (enabled: boolean) => {
     if (!telegramUserId || togglingUserbot) return;
 
