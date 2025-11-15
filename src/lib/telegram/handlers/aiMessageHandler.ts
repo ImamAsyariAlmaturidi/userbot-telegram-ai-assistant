@@ -3,6 +3,7 @@ import type { MessageContext, AgentResponse } from "../../../../types";
 import { createUserbotAgent } from "../../../lib/ai/agent";
 import { getCustomPrompt } from "../../../lib/ai/getCustomPrompt";
 import { run } from "@openai/agents";
+import { threadManager } from "../../../lib/ai/threadManager";
 /**
  * AI-powered message handler
  * Uses LangChain agent to process and respond to messages
@@ -30,6 +31,23 @@ export class AIMessageHandler implements MessageHandler {
 
       const customPrompt = await getCustomPrompt(userIdToUse);
 
+      // Get or create session for conversation history
+      let session = null;
+      if (this.ownerUserId) {
+        try {
+          session = await threadManager.getOrCreateSession(
+            this.ownerUserId,
+            String(context.senderId)
+          );
+        } catch (error) {
+          console.error(
+            "[AIMessageHandler] Error getting/creating session:",
+            error
+          );
+          // Continue without session if error
+        }
+      }
+
       // Build comprehensive context message with sender info
       let senderContext = "📋 INFORMASI USER YANG MENGIRIM PESAN:\n";
 
@@ -52,7 +70,13 @@ export class AIMessageHandler implements MessageHandler {
       // Add instruction for AI to use this context
       senderContext += `\n💡 INSTRUKSI: Gunakan informasi user di atas untuk personalisasi respons. Sapa user dengan nama mereka jika tersedia. Referensi user dengan nama atau username mereka saat merespons.\n`;
 
-      const contextMessage = `${senderContext}\n---\n\nPESAN DARI USER:\n${context.message}`;
+      // When using session, we can add sender context as system message or include in user message
+      // For now, we'll include it in the message when using session
+      const userMessage = session
+        ? `${senderContext}\n\nPesan: ${context.message}`
+        : `${senderContext}\n---\n\nPESAN DARI USER:\n${context.message}`;
+
+      const contextMessage = userMessage; // For fallback when no session
 
       const senderName =
         context.senderFirstName || context.senderUsername || "User";
@@ -87,13 +111,37 @@ export class AIMessageHandler implements MessageHandler {
         );
       });
 
+      // Run agent with session for conversation history
+      // When using session, include sender context in the message
+      // Session automatically handles conversation history
       const response = await Promise.race([
-        run(agent, contextMessage),
+        session
+          ? run(agent, userMessage, { session })
+          : run(agent, contextMessage),
         timeoutPromise,
       ]);
 
+      const aiResponse = (response.finalOutput as unknown as string) || "";
+
+      // Trim conversation to 30 messages if using session
+      // run() automatically saves messages to session, so we trim after
+      if (session && this.ownerUserId) {
+        try {
+          await threadManager.trimConversation(
+            this.ownerUserId,
+            String(context.senderId)
+          );
+        } catch (error) {
+          console.error(
+            "[AIMessageHandler] Error trimming conversation:",
+            error
+          );
+          // Continue even if trimming fails
+        }
+      }
+
       return {
-        content: (response.finalOutput as unknown as string) || "",
+        content: aiResponse,
         metadata: {
           chatId: context.chatId,
           senderId: context.senderId,
