@@ -30,41 +30,31 @@ export class AIMessageHandler implements MessageHandler {
 
       const customPrompt = await getCustomPrompt(userIdToUse);
 
-      if (customPrompt) {
-        console.log(
-          `[AIMessageHandler] ✅ Using custom prompt (length: ${customPrompt.length})`
-        );
-        console.log(
-          `[AIMessageHandler] Custom prompt preview: ${customPrompt.substring(
-            0,
-            100
-          )}...`
-        );
-      } else {
-        console.log(
-          `[AIMessageHandler] ℹ️ Using default prompt (no custom prompt found)`
-        );
-      }
-
-      // Build context message with ALL user info
+      // Build context message with ALL user info (always include all fields, even if empty)
       let userInfo = "User yang chat:\n";
-      if (context.senderFirstName)
-        userInfo += `- Nama Depan: ${context.senderFirstName}\n`;
-      if (context.senderLastName)
-        userInfo += `- Nama Belakang: ${context.senderLastName}\n`;
-      if (context.senderUsername)
-        userInfo += `- Username: @${context.senderUsername}\n`;
+      userInfo += `- Nama Depan: ${context.senderFirstName || ""}\n`;
+      userInfo += `- Nama Belakang: ${context.senderLastName || ""}\n`;
+      userInfo += `- Username: ${
+        context.senderUsername ? `@${context.senderUsername}` : ""
+      }\n`;
       userInfo += `- Telegram ID: ${context.senderId}\n`;
 
       const contextMessage = `${userInfo}\nPesan: ${context.message}`;
 
       const senderName =
         context.senderFirstName || context.senderUsername || "User";
-      console.log(
-        `[AIMessageHandler] Context: ${context.senderFirstName || "?"} ${
-          context.senderLastName || ""
-        } (@${context.senderUsername || "?"})`
-      );
+
+      // Build context log without "?" placeholders
+      const contextParts: string[] = [];
+      if (context.senderFirstName) contextParts.push(context.senderFirstName);
+      if (context.senderLastName) contextParts.push(context.senderLastName);
+      const namePart = contextParts.length > 0 ? contextParts.join(" ") : "";
+      const usernamePart = context.senderUsername
+        ? `@${context.senderUsername}`
+        : "";
+      const contextLog =
+        [namePart, usernamePart].filter(Boolean).join(" ") || "Unknown";
+      console.log(`[AIMessageHandler] Context: ${contextLog}`);
 
       // Create agent with custom prompt or use default - pass all user info
       const userContext = {
