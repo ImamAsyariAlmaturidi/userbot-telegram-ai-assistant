@@ -2,7 +2,6 @@ import { tools } from "./tools";
 import type { AgentConfig } from "./types";
 import { run, Agent, Tool } from "@openai/agents";
 import { webSearchTool } from "@openai/agents";
-import agentRag from "./tools/rag";
 
 // Hardcode prompt statis (base prompt) - GENERIC untuk semua jenis bisnis
 const HARDCODE_PROMPT = `
@@ -125,13 +124,7 @@ export function createUserbotAgent(
     name: "userbot-agent",
     model: "gpt-4o-mini",
     instructions: finalInstructions,
-    tools: [
-      webSearchTool(),
-      agentRag.asTool({
-        toolName: "knowledge_search",
-        toolDescription: "Get the knowledge base",
-      }),
-    ],
+    tools: [webSearchTool()],
   });
 }
 

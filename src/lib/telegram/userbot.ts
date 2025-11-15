@@ -70,15 +70,5 @@ export async function startUserbot(
  * Stop userbot for specific session
  */
 export async function stopUserbot(sessionString: string): Promise<void> {
-  const client = userbotStore.get(sessionString);
-  if (client && client.connected) {
-    try {
-      await client.disconnect();
-      console.log(`🤖 Userbot disconnected for session`);
-    } catch (err) {
-      console.error("Error disconnecting userbot:", err);
-    }
-  }
   await userbotStore.remove(sessionString);
-  console.log(`🤖 Userbot stopped for session`);
 }

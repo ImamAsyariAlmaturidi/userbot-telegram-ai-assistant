@@ -23,31 +23,38 @@ export async function POST(req: Request) {
     });
     console.log("[startClient] sessionString:", sessionString);
 
-    // Simpan phone_number ke database (telegram_user_id akan diupdate saat dashboard load dengan init data)
+    // Simpan phone_number ke Supabase (telegram_user_id akan diupdate saat dashboard load dengan init data)
     try {
-      // Cek apakah user dengan phone_number ini sudah ada
-      const existingUser = await prisma.user.findFirst({
-        where: { phoneNumber: phoneNumber },
-        select: { id: true },
-      });
-
-      if (existingUser) {
-        // Update phone_number jika sudah ada
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: { phoneNumber: phoneNumber },
-        });
-      } else {
-        // Skip create jika tidak ada telegramUserId
-        // telegram_user_id akan diupdate saat dashboard load dengan init data
-        console.log(
-          "[startClient] User not found, will be created when telegram_user_id is available"
+      const supabase = createServerClient();
+      if (!supabase) {
+        console.warn(
+          "[startClient] Supabase not configured, skipping phone number save"
         );
+      } else {
+        // Cek apakah user dengan phone_number ini sudah ada
+        const { data: existingUser } = await supabase
+          .from("users")
+          .select("id")
+          .eq("phone_number", phoneNumber)
+          .single();
+
+        if (existingUser) {
+          // Update phone_number jika sudah ada
+          await supabase
+            .from("users")
+            .update({ phone_number: phoneNumber })
+            .eq("phone_number", phoneNumber);
+        } else {
+          // Insert baru dengan phone_number (telegram_user_id akan diupdate nanti)
+          await supabase.from("users").insert({
+            phone_number: phoneNumber,
+          });
+        }
       }
     } catch (error) {
       // Jangan throw error, karena login sudah berhasil
       console.error(
-        "[startClient] Error saving phone number to database:",
+        "[startClient] Error saving phone number to Supabase:",
         error
       );
     }

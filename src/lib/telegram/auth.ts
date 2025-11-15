@@ -3,6 +3,7 @@
 import { TelegramClient, Api } from "telegram";
 import { cookies } from "next/headers";
 import { createClientFromEnv } from "./client";
+import { writeSession } from "./sessionFs";
 import startBot from "@/app/services/handler/userbotAgent";
 import { prisma } from "@/lib/prisma";
 
@@ -18,23 +19,6 @@ export async function checkAuthStatus(): Promise<{
 
   if (!sessionCookie) {
     return { isAuthorized: false };
-  }
-
-  // Cek apakah session ada di database
-  try {
-    const user = await prisma.user.findFirst({
-      where: { session: sessionCookie },
-      select: { id: true, session: true, telegramUserId: true },
-    });
-
-    if (!user || !user.session) {
-      // Session tidak ada di database, hapus cookie dan return false
-      cookieStore.delete("tg_session");
-      return { isAuthorized: false };
-    }
-  } catch (err) {
-    console.error("Error checking session in database:", err);
-    // Continue dengan validasi Telegram client
   }
 
   const client = createClientFromEnv(sessionCookie);
@@ -73,11 +57,6 @@ export async function checkAuthStatus(): Promise<{
         sessionString: sessionString as unknown as string,
       };
     }
-
-    // Jika tidak authorized, hapus session dari database dan cookie
-    // Note: Session adalah required field, jadi kita tidak bisa set ke empty string
-    // Tapi kita bisa hapus cookie dan user harus login ulang
-    cookieStore.delete("tg_session");
 
     return { isAuthorized: false };
   } catch (err) {
@@ -124,20 +103,11 @@ export async function sendCode(phoneNumber: string): Promise<void> {
       maxAge: 300,
       path: "/",
     });
-    // Simpan session ke database berdasarkan phone number
+    // Persist session file keyed by phone number (best-effort)
     try {
-      const user = await prisma.user.findFirst({
-        where: { phoneNumber: phoneNumber },
-      });
-
-      if (user) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { session: sessionString as unknown as string },
-        });
-      }
+      await writeSession(phoneNumber, sessionString as unknown as string);
     } catch (e) {
-      console.error("Failed to save session to database:", e);
+      console.error("Failed to write session file:", e);
     }
     console.log(
       "[sendCode] phoneCodeHash:",
@@ -215,70 +185,21 @@ export async function startClient(params: {
       maxAge: 60 * 60 * 24 * 7,
       path: "/",
     });
-    // Simpan session ke database
+    // Persist session file keyed by phone number
     try {
-      // Dapatkan telegramUserId dari client setelah login
-      const me = await client.getMe();
-      const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
-
-      if (telegramUserId) {
-        // Update atau create user dengan telegramUserId dan session
-        await prisma.user.upsert({
-          where: { telegramUserId: telegramUserId },
-          update: {
-            session: sessionString as unknown as string,
-            phoneNumber: phoneNumber,
-          },
-          create: {
-            telegramUserId: telegramUserId,
-            phoneNumber: phoneNumber,
-            session: sessionString as unknown as string,
-          },
-        });
-      } else {
-        // Fallback: cari berdasarkan phone number
-        const user = await prisma.user.findFirst({
-          where: { phoneNumber: phoneNumber },
-        });
-
-        if (user) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { session: sessionString as unknown as string },
-          });
-        }
-      }
+      await writeSession(phoneNumber, sessionString as unknown as string);
     } catch (e) {
-      console.error("Failed to save session to database:", e);
+      console.error("Failed to write session file:", e);
     }
     cookieStore.delete("tg_phone_hash" as unknown as string);
 
     console.log("✅ Logged in successfully!");
 
-    // Auto-start userbot setelah login berhasil jika enabled
+    // Auto-start userbot setelah login berhasil
     try {
-      // Get telegramUserId from client (already obtained above)
-      const me = await client.getMe();
-      const ownerTelegramUserId = me?.id ? BigInt(me.id.toString()) : null;
-
-      if (ownerTelegramUserId) {
-        // Check if userbot is enabled (default is true)
-        const user = await prisma.user.findUnique({
-          where: { telegramUserId: ownerTelegramUserId },
-          select: { userbotEnabled: true },
-        });
-
-        if (!user || user.userbotEnabled) {
-          // Default to enabled if not set
-          const { startUserbot } = await import("./userbot");
-          await startUserbot({
-            sessionString: sessionString as unknown as string,
-          });
-          console.log("🤖 Userbot started automatically");
-        } else {
-          console.log("🤖 Userbot is disabled, not starting after login");
-        }
-      }
+      const { startUserbot } = await import("./userbot");
+      await startUserbot({ sessionString: sessionString as unknown as string });
+      console.log("🤖 Userbot started automatically");
     } catch (err) {
       console.error("⚠️ Failed to auto-start userbot:", err);
       // Jangan throw error, karena login sudah berhasil

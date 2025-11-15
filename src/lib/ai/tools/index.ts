@@ -4,10 +4,8 @@
  */
 
 import { weatherTool } from "./weather";
-import agentRag from "./rag";
 
 export const tools = [
   weatherTool,
-  agentRag,
   // Add more tools here
 ];
