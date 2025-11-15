@@ -1,13 +1,16 @@
 import { OpenAIConversationsSession } from "@openai/agents";
 import type { AgentInputItem } from "@openai/agents-core";
+import { createHash } from "crypto";
 
 /**
  * Thread Manager untuk conversation history menggunakan OpenAIConversationsSession
  * Session ID format: ownerUserId_senderId
+ * Conversation ID format: conv_<hash> (OpenAI requires conversation_id to start with 'conv_')
  * Auto-limit 30 messages (removes oldest when exceeds)
  */
 class ThreadManager {
   private sessionStore: Map<string, OpenAIConversationsSession> = new Map();
+  private conversationIdMap: Map<string, string> = new Map(); // sessionKey -> conversationId
   private readonly MAX_MESSAGES = 30;
 
   /**
@@ -15,6 +18,29 @@ class ThreadManager {
    */
   private getSessionKey(ownerUserId: string, senderId: string): string {
     return `${ownerUserId}_${senderId}`;
+  }
+
+  /**
+   * Generate valid conversation ID from session key
+   * OpenAI requires conversation_id to start with 'conv_'
+   */
+  private getConversationId(sessionKey: string): string {
+    // Check if we already have a conversation ID for this session
+    if (this.conversationIdMap.has(sessionKey)) {
+      return this.conversationIdMap.get(sessionKey)!;
+    }
+
+    // Generate conversation ID: conv_<hash>
+    // Use first 24 chars of hash to keep it reasonable length
+    const hash = createHash("sha256")
+      .update(sessionKey)
+      .digest("hex")
+      .substring(0, 24);
+    const conversationId = `conv_${hash}`;
+
+    // Store mapping
+    this.conversationIdMap.set(sessionKey, conversationId);
+    return conversationId;
   }
 
   /**
@@ -31,14 +57,17 @@ class ThreadManager {
       return this.sessionStore.get(sessionKey)!;
     }
 
-    // Create new session
+    // Create new session with valid conversation ID
     try {
+      const conversationId = this.getConversationId(sessionKey);
       const session = new OpenAIConversationsSession({
-        conversationId: sessionKey, // Use sessionKey as conversationId
+        conversationId: conversationId, // Use valid conversation ID format
       });
 
       this.sessionStore.set(sessionKey, session);
-      console.log(`[ThreadManager] Created new session: ${sessionKey}`);
+      console.log(
+        `[ThreadManager] Created new session: ${sessionKey} -> ${conversationId}`
+      );
       return session;
     } catch (error) {
       console.error("[ThreadManager] Error creating session:", error);
@@ -116,6 +145,7 @@ class ThreadManager {
       if (session) {
         await session.clearSession();
         this.sessionStore.delete(sessionKey);
+        this.conversationIdMap.delete(sessionKey); // Also remove from mapping
         console.log(`[ThreadManager] Cleared session: ${sessionKey}`);
         return true;
       }
