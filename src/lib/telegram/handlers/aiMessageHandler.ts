@@ -30,16 +30,29 @@ export class AIMessageHandler implements MessageHandler {
 
       const customPrompt = await getCustomPrompt(userIdToUse);
 
-      // Build context message with ALL user info (always include all fields, even if empty)
-      let userInfo = "User yang chat:\n";
-      userInfo += `- Nama Depan: ${context.senderFirstName || ""}\n`;
-      userInfo += `- Nama Belakang: ${context.senderLastName || ""}\n`;
-      userInfo += `- Username: ${
-        context.senderUsername ? `@${context.senderUsername}` : ""
-      }\n`;
-      userInfo += `- Telegram ID: ${context.senderId}\n`;
+      // Build comprehensive context message with sender info
+      let senderContext = "📋 INFORMASI USER YANG MENGIRIM PESAN:\n";
 
-      const contextMessage = `${userInfo}\nPesan: ${context.message}`;
+      // Build full name
+      const fullName = [context.senderFirstName, context.senderLastName]
+        .filter(Boolean)
+        .join(" ");
+      if (fullName) {
+        senderContext += `- Nama Lengkap: ${fullName}\n`;
+      } else if (context.senderFirstName) {
+        senderContext += `- Nama: ${context.senderFirstName}\n`;
+      }
+
+      if (context.senderUsername) {
+        senderContext += `- Username: @${context.senderUsername}\n`;
+      }
+
+      senderContext += `- Telegram ID: ${context.senderId}\n`;
+
+      // Add instruction for AI to use this context
+      senderContext += `\n💡 INSTRUKSI: Gunakan informasi user di atas untuk personalisasi respons. Sapa user dengan nama mereka jika tersedia. Referensi user dengan nama atau username mereka saat merespons.\n`;
+
+      const contextMessage = `${senderContext}\n---\n\nPESAN DARI USER:\n${context.message}`;
 
       const senderName =
         context.senderFirstName || context.senderUsername || "User";

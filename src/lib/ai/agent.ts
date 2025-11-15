@@ -93,23 +93,34 @@ export function createUserbotAgent(
   // Build base instructions with user context
   let finalInstructions = HARDCODE_PROMPT;
 
-  console.log(customInstructions);
-  // console.log("userContext", userContext);
   // Add user context instruction if provided
   if (userContext) {
     const { firstName, lastName, username, userId } = userContext;
-    let userInfoInstruction = "\n\n📌 PENTING - Informasi User yang Chat:\n";
+    let userInfoInstruction = "\n\n📌 KONTEKS USER - INFORMASI PENTING:\n";
 
-    if (firstName) userInfoInstruction += `- Nama Depan: ${firstName}\n`;
-    if (lastName) userInfoInstruction += `- Nama Belakang: ${lastName}\n`;
-    if (username) userInfoInstruction += `- Username: @${username}\n`;
-    if (userId) userInfoInstruction += `- Telegram ID: ${userId}\n`;
-
-    // Add greeting instruction
-    const displayName = firstName || username || "User";
-    if (displayName !== "User") {
-      userInfoInstruction += `\n✅ Sapa user dengan nama mereka (${displayName}) di awal percakapan atau saat merespons.`;
+    // Build full name
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
+    if (fullName) {
+      userInfoInstruction += `- Nama Lengkap User: ${fullName}\n`;
+    } else if (firstName) {
+      userInfoInstruction += `- Nama User: ${firstName}\n`;
     }
+
+    if (username) {
+      userInfoInstruction += `- Username User: @${username}\n`;
+    }
+
+    if (userId) {
+      userInfoInstruction += `- Telegram ID User: ${userId}\n`;
+    }
+
+    // Add comprehensive instructions for using context
+    const displayName = fullName || firstName || username || "User";
+    userInfoInstruction += `\n✅ ATURAN PERSONALISASI:\n`;
+    userInfoInstruction += `1. SELALU gunakan nama user (${displayName}) saat menyapa atau merespons\n`;
+    userInfoInstruction += `2. Referensi user dengan nama mereka, bukan "kamu" atau "anda" jika memungkinkan\n`;
+    userInfoInstruction += `3. Buat respons yang personal dan relevan dengan konteks user\n`;
+    userInfoInstruction += `4. Ingat informasi user ini untuk seluruh percakapan\n`;
 
     finalInstructions += userInfoInstruction;
   }
