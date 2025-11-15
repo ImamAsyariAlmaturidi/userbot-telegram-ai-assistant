@@ -253,7 +253,7 @@ export default function CustomizePromptPage() {
             <Button
               onClick={handleReset}
               disabled={loading}
-              mode="secondary"
+              mode="outline"
               style={{ width: "100%" }}
             >
               Reset ke Default
