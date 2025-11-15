@@ -3,11 +3,12 @@
 import { TelegramClient, Api } from "telegram";
 import { cookies } from "next/headers";
 import { createClientFromEnv } from "./client";
-import { writeSession } from "./sessionFs";
 import startBot from "@/app/services/handler/userbotAgent";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Check if user is authorized
+ * Cek session dari cookie, lalu validasi dengan database
  */
 export async function checkAuthStatus(): Promise<{
   isAuthorized: boolean;
@@ -17,9 +18,27 @@ export async function checkAuthStatus(): Promise<{
   const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
 
   if (!sessionCookie) {
+    console.log("[checkAuthStatus] No session cookie found");
     return { isAuthorized: false };
   }
 
+  // Cek session di database
+  try {
+    const user = await prisma.user.findFirst({
+      where: { session: sessionCookie },
+      select: { telegramUserId: true, session: true },
+    });
+
+    if (!user) {
+      console.log("[checkAuthStatus] Session not found in database");
+      return { isAuthorized: false };
+    }
+  } catch (err) {
+    console.error("[checkAuthStatus] Error checking database:", err);
+    return { isAuthorized: false };
+  }
+
+  // Validasi session dengan Telegram
   const client = createClientFromEnv(sessionCookie);
   try {
     await client.connect();
@@ -28,22 +47,28 @@ export async function checkAuthStatus(): Promise<{
     if (isAuthorized) {
       const sessionString = client.session.save();
 
-      // Auto-start userbot jika belum running
+      // Update session di database jika berbeda
       try {
-        const { startUserbot } = await import("./userbot");
-        const { userbotStore } = await import("./userbotStore");
+        const me = await client.getMe();
+        const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
 
-        const sessionStr = sessionString as unknown as string;
-        if (
-          !userbotStore.has(sessionStr) ||
-          !userbotStore.isConnected(sessionStr)
-        ) {
-          await startUserbot({ sessionString: sessionStr });
-          console.log("🤖 Userbot auto-started on status check");
+        if (telegramUserId) {
+          await prisma.user.updateMany({
+            where: { telegramUserId: telegramUserId },
+            data: { session: sessionString as unknown as string },
+          });
         }
       } catch (err) {
-        console.error("⚠️ Failed to auto-start userbot:", err);
+        console.error("Error updating session in database:", err);
       }
+
+      // NOTE: Userbot sekarang dijalankan sebagai proses terpisah via `bun run bot`
+      // Jangan auto-start userbot dari Next.js untuk menghindari:
+      // - Hot reload restarting userbot
+      // - Connection drops saat server restart
+      // - ECONNRESET errors
+      //
+      // Untuk start userbot, jalankan: `bun run bot` atau `bun run bot:dev`
 
       return {
         isAuthorized: true,
@@ -96,12 +121,6 @@ export async function sendCode(phoneNumber: string): Promise<void> {
       maxAge: 300,
       path: "/",
     });
-    // Persist session file keyed by phone number (best-effort)
-    try {
-      await writeSession(phoneNumber, sessionString as unknown as string);
-    } catch (e) {
-      console.error("Failed to write session file:", e);
-    }
     console.log(
       "[sendCode] phoneCodeHash:",
       (result as Api.auth.SentCode).phoneCodeHash
@@ -178,25 +197,42 @@ export async function startClient(params: {
       maxAge: 60 * 60 * 24 * 7,
       path: "/",
     });
-    // Persist session file keyed by phone number
-    try {
-      await writeSession(phoneNumber, sessionString as unknown as string);
-    } catch (e) {
-      console.error("Failed to write session file:", e);
-    }
     cookieStore.delete("tg_phone_hash" as unknown as string);
+
+    // Save session ke database
+    try {
+      const me = await client.getMe();
+      const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
+
+      if (telegramUserId) {
+        await prisma.user.upsert({
+          where: { telegramUserId: telegramUserId },
+          update: {
+            session: sessionString as unknown as string,
+            phoneNumber: phoneNumber,
+          },
+          create: {
+            telegramUserId: telegramUserId,
+            session: sessionString as unknown as string,
+            phoneNumber: phoneNumber,
+          },
+        });
+        console.log("✅ Session saved to database");
+      }
+    } catch (err) {
+      console.error("⚠️ Failed to save session to database:", err);
+      // Jangan throw error, karena login sudah berhasil
+    }
 
     console.log("✅ Logged in successfully!");
 
-    // Auto-start userbot setelah login berhasil
-    try {
-      const { startUserbot } = await import("./userbot");
-      await startUserbot({ sessionString: sessionString as unknown as string });
-      console.log("🤖 Userbot started automatically");
-    } catch (err) {
-      console.error("⚠️ Failed to auto-start userbot:", err);
-      // Jangan throw error, karena login sudah berhasil
-    }
+    // NOTE: Userbot sekarang dijalankan sebagai proses terpisah via `bun run bot`
+    // Jangan auto-start userbot dari Next.js untuk menghindari:
+    // - Hot reload restarting userbot
+    // - Connection drops saat server restart
+    // - ECONNRESET errors
+    //
+    // Untuk start userbot, jalankan: `bun run bot` atau `bun run bot:dev`
 
     return { sessionString: sessionString as unknown as string };
   } catch (err: any) {

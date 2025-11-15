@@ -64,7 +64,19 @@ export class AIMessageHandler implements MessageHandler {
       };
       const agent = createUserbotAgent(customPrompt || undefined, userContext);
 
-      const response = await run(agent, contextMessage);
+      // Add timeout untuk prevent infinite loop (max 60 detik)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () =>
+            reject(new Error("TIMEOUT: Agent execution exceeded 60 seconds")),
+          60000
+        );
+      });
+
+      const response = await Promise.race([
+        run(agent, contextMessage),
+        timeoutPromise,
+      ]);
 
       return {
         content: (response.finalOutput as unknown as string) || "",

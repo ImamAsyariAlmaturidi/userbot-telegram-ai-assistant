@@ -238,6 +238,29 @@ export function createMessageHandler(
       `📩 New private message from ${senderName} (${context.senderId}): ${text}`
     );
 
+    // Check if userbot is enabled for the owner
+    if (ownerUserId) {
+      try {
+        const { prisma } = await import("@/lib/prisma");
+
+        const ownerId = BigInt(parseInt(ownerUserId, 10));
+        const user = await prisma.user.findUnique({
+          where: { telegramUserId: ownerId },
+          select: { userbotEnabled: true },
+        });
+
+        if (!user || !user.userbotEnabled) {
+          console.log(
+            `🚫 Userbot is disabled for owner ${ownerUserId}, ignoring message`
+          );
+          return;
+        }
+      } catch (err) {
+        console.error("⚠️ Error checking userbot status:", err);
+        // Continue processing if check fails
+      }
+    }
+
     try {
       const response = await handler.handle(context);
 

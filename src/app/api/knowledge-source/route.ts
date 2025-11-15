@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import {
   generateEmbedding,
   embeddingToVectorString,
 } from "@/lib/ai/embeddings";
-
-const prisma = new PrismaClient();
 
 // GET all knowledge sources for a user
 export async function GET(req: NextRequest) {

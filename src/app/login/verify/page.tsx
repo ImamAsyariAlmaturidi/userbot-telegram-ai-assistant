@@ -14,7 +14,7 @@ import {
 } from "@telegram-apps/telegram-ui";
 import { SectionFooter } from "@telegram-apps/telegram-ui/dist/components/Blocks/Section/components/SectionFooter/SectionFooter";
 import { useTranslations } from "next-intl";
-import { verifyLoginCode } from "@/core/api/auth";
+import { verifyLoginCode, getAuthStatus } from "@/core/api/auth";
 
 function VerifyPageContent() {
   const t = useTranslations("login");
@@ -24,6 +24,7 @@ function VerifyPageContent() {
   const [phoneCode, setPhoneCode] = useState<number[]>([]);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [snack, setSnack] = useState<{
     open: boolean;
     text: string;
@@ -40,8 +41,30 @@ function VerifyPageContent() {
     }
   }, [phoneCode]);
 
+  // Check auth status first - if already logged in, redirect to dashboard
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const status = await getAuthStatus();
+        if (status?.isAuthorized) {
+          // Already logged in, redirect to dashboard
+          router.push("/dashboard");
+          return;
+        }
+      } catch (err) {
+        console.error("[VerifyPage] Auth check failed:", err);
+      } finally {
+        setCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
   // Get phone number from URL params or sessionStorage
   useEffect(() => {
+    if (checkingAuth) return; // Wait for auth check to complete
+
     const phoneFromUrl = searchParams.get("phone");
     const phoneFromStorage =
       typeof window !== "undefined"
@@ -57,7 +80,7 @@ function VerifyPageContent() {
       console.warn("[VerifyPage] No phone number found, redirecting to login");
       router.push("/login");
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, checkingAuth]);
 
   async function handleVerifyCode() {
     const codeString = phoneCode.join("");
@@ -126,8 +149,8 @@ function VerifyPageContent() {
     router.push("/login");
   }
 
-  // Show loading if phone number is not loaded yet
-  if (!phoneNumber) {
+  // Show loading if checking auth or phone number is not loaded yet
+  if (checkingAuth || !phoneNumber) {
     return (
       <Page>
         <div

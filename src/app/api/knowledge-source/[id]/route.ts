@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma"; // PASTIKAN pakai prisma singleton
 import { cookies } from "next/headers";
 
-const prisma = new PrismaClient();
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-// DELETE knowledge source
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    const body = await req.json();
-    const { telegram_user_id } = body;
+    const { id } = await params; // Next.js 16: params adalah Promise
+
+    // Safely parse JSON (DELETE sometimes has no body!)
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    const telegram_user_id = body.telegram_user_id;
 
     if (!telegram_user_id) {
       return NextResponse.json(
@@ -21,11 +29,11 @@ export async function DELETE(
       );
     }
 
-    const userId = BigInt(parseInt(telegram_user_id, 10));
+    const userId = BigInt(telegram_user_id);
 
-    // Get session from cookie (required)
+    // cookieStore tidak perlu await
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
+    const sessionCookie = cookieStore.get("tg_session")?.value || "";
 
     if (!sessionCookie) {
       return NextResponse.json(
@@ -34,45 +42,34 @@ export async function DELETE(
       );
     }
 
-    // Verify user exists and session matches
     const user = await prisma.user.findUnique({
       where: { telegramUserId: userId },
-      select: { id: true, session: true },
+      select: { session: true },
     });
 
     if (!user || user.session !== sessionCookie) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    // Check if knowledge source exists
-    const knowledgeSource = await prisma.knowledgeSource.findUnique({
+    await prisma.knowledgeSource.delete({
       where: { id },
-      select: { id: true },
     });
 
-    if (!knowledgeSource) {
+    console.log(`[API] Deleted knowledge source ${id}`);
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (error: any) {
+    console.error("DELETE /knowledge-source error:", error);
+
+    if (error.code === "P2025") {
       return NextResponse.json(
         { error: "Knowledge source not found" },
         { status: 404 }
       );
     }
 
-    // Delete knowledge source
-    await prisma.knowledgeSource.delete({
-      where: { id },
-    });
-
-    console.log(
-      `[API] Deleted knowledge source ${id} for telegram_user_id: ${userId}`
-    );
-
-    return NextResponse.json({
-      success: true,
-    });
-  } catch (error: any) {
-    console.error("Error deleting knowledge source:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to delete knowledge source" },
+      { error: error.message || "Internal server error" },
       { status: 500 }
     );
   }

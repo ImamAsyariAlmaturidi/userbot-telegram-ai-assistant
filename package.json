@@ -8,9 +8,9 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "postinstall": "prisma generate"
+    "bot": "bun run bot/run.ts",
+    "bot:dev": "bun --watch bot/run.ts",
+    "bot:node": "tsx bot/run.ts"
   },
   "dependencies": {
     "@langchain/anthropic": "^0.2.18",
