@@ -5,24 +5,21 @@ import { prisma } from "@/lib/prisma";
  * Returns null if no custom prompt is set (will use default)
  */
 export async function getCustomPrompt(
-  telegramUserId: number | string
+  telegramUserId: number | string | bigint
 ): Promise<string | null> {
   try {
-    // Ensure we have a valid number
-    const userId =
-      typeof telegramUserId === "string"
-        ? BigInt(parseInt(telegramUserId, 10))
-        : BigInt(telegramUserId);
-
-    if (isNaN(Number(userId))) {
-      console.error(
-        `[getCustomPrompt] Invalid telegram_user_id: ${telegramUserId}`
-      );
-      return null;
+    // Ensure we have a valid BigInt
+    let userId: bigint;
+    if (typeof telegramUserId === "bigint") {
+      userId = telegramUserId;
+    } else if (typeof telegramUserId === "string") {
+      userId = BigInt(parseInt(telegramUserId, 10));
+    } else {
+      userId = BigInt(telegramUserId);
     }
 
     console.log(
-      `[getCustomPrompt] Fetching prompt for telegram_user_id: ${userId} (original: ${telegramUserId}, type: ${typeof telegramUserId})`
+      `[getCustomPrompt] Fetching prompt for telegram_user_id: ${userId}`
     );
 
     const user = await prisma.user.findUnique({
@@ -32,7 +29,7 @@ export async function getCustomPrompt(
 
     if (!user) {
       console.log(
-        `[getCustomPrompt] No user found for ${userId}, using default`
+        `[getCustomPrompt] User not found for ${userId}, using default prompt`
       );
       return null;
     }

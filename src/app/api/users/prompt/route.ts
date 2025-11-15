@@ -62,9 +62,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(
-      `[API] Updating prompt for telegram_user_id: ${telegram_user_id}`
-    );
+    console.log(`[API] Updating prompt for telegram_user_id: ${userId}`);
     console.log(`[API] Prompt length: ${custom_prompt?.length || 0}`);
 
     const updatedUser = await prisma.user.update({

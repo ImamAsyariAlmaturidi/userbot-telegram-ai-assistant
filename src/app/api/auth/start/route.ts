@@ -1,6 +1,7 @@
 "use server";
 import { NextResponse } from "next/server";
 import { startClient } from "@/lib/telegram/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
@@ -22,8 +23,41 @@ export async function POST(req: Request) {
     });
     console.log("[startClient] sessionString:", sessionString);
 
-    // User akan di-save ke database via /api/users/save saat dashboard load dengan init data
-    // Tidak perlu save di sini karena telegram_user_id belum tersedia
+    // Simpan phone_number ke database (telegram_user_id akan diupdate saat dashboard load dengan init data)
+    try {
+      // Cek apakah user dengan phone_number ini sudah ada
+      const existingUser = await prisma.user.findFirst({
+        where: { phoneNumber: phoneNumber },
+        select: { id: true },
+      });
+
+      if (existingUser) {
+        // Update phone_number dan session jika sudah ada
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            phoneNumber: phoneNumber,
+            session: sessionString as unknown as string,
+          },
+        });
+      } else {
+        // Insert baru dengan phone_number (telegram_user_id akan diupdate nanti)
+        // Note: session dan telegramUserId akan diupdate saat login complete
+        await prisma.user.create({
+          data: {
+            phoneNumber: phoneNumber,
+            session: sessionString as unknown as string,
+            telegramUserId: BigInt(0), // Temporary, will be updated later
+          },
+        });
+      }
+    } catch (error) {
+      // Jangan throw error, karena login sudah berhasil
+      console.error(
+        "[startClient] Error saving phone number to database:",
+        error
+      );
+    }
 
     return NextResponse.json({ ok: true, sessionString });
   } catch (error: any) {
