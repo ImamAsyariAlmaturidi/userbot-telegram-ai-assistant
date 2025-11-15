@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Page } from "@/components/Page";
-import { Button, Spinner, Snackbar } from "@telegram-apps/telegram-ui";
+import {
+  Button,
+  Spinner,
+  Snackbar,
+  Cell,
+  Switch,
+  Section,
+} from "@telegram-apps/telegram-ui";
 import { initDataState } from "@telegram-apps/sdk-react";
 import { useSignal } from "@telegram-apps/sdk-react";
 import { useRouter } from "next/navigation";
@@ -15,6 +22,9 @@ export default function DashboardPage() {
   const initData = useSignal(initDataState);
   const [activeTab, setActiveTab] = useState("prompt");
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [userbotEnabled, setUserbotEnabled] = useState(false);
+  const [loadingUserbotStatus, setLoadingUserbotStatus] = useState(true);
+  const [togglingUserbot, setTogglingUserbot] = useState(false);
   const [snack, setSnack] = useState<{
     open: boolean;
     text: string;
@@ -48,6 +58,30 @@ export default function DashboardPage() {
     checkAuth();
   }, [router]);
 
+  // Fetch userbot status
+  useEffect(() => {
+    if (!telegramUserId || checkingAuth) return;
+
+    const fetchUserbotStatus = async () => {
+      try {
+        const response = await fetch(
+          `/api/userbot/toggle?telegram_user_id=${telegramUserId}`
+        );
+        const data = await response.json();
+
+        if (data.success) {
+          setUserbotEnabled(data.userbotEnabled || false);
+        }
+      } catch (error) {
+        console.error("Error fetching userbot status:", error);
+      } finally {
+        setLoadingUserbotStatus(false);
+      }
+    };
+
+    fetchUserbotStatus();
+  }, [telegramUserId, checkingAuth]);
+
   // Save user data and init data when init data is available
   // Hanya update init data, tidak reset prompt
   useEffect(() => {
@@ -77,6 +111,47 @@ export default function DashboardPage() {
 
     saveUserData();
   }, [initData, telegramUserId, checkingAuth]);
+  const handleToggleUserbot = async (enabled: boolean) => {
+    if (!telegramUserId || togglingUserbot) return;
+
+    setTogglingUserbot(true);
+    try {
+      const response = await fetch("/api/userbot/toggle", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          telegram_user_id: telegramUserId,
+          enabled,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUserbotEnabled(data.userbotEnabled);
+        setSnack({
+          open: true,
+          text: enabled
+            ? "AI Assistant berhasil diaktifkan"
+            : "AI Assistant berhasil dinonaktifkan",
+          tone: "positive",
+        });
+      } else {
+        throw new Error(data.error || "Gagal mengubah status AI");
+      }
+    } catch (error: any) {
+      console.error("Error toggling userbot:", error);
+      setSnack({
+        open: true,
+        text: error.message || "Gagal mengubah status AI",
+        tone: "critical",
+      });
+    } finally {
+      setTogglingUserbot(false);
+    }
+  };
 
   if (checkingAuth) {
     return (
@@ -138,7 +213,44 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content */}
-        <div className="max-w-4xl mx-auto px-4 pt-8">
+        <div className="max-w-4xl mx-auto px-4 pt-8 space-y-6">
+          {/* AI Toggle Section */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+            <Section header="Status AI Assistant">
+              <Cell
+                Component="label"
+                after={
+                  <Switch
+                    checked={userbotEnabled}
+                    disabled={togglingUserbot || loadingUserbotStatus}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      handleToggleUserbot(checked);
+                    }}
+                  />
+                }
+                description={
+                  userbotEnabled
+                    ? "AI Assistant aktif dan siap merespons pesan"
+                    : "AI Assistant tidak aktif"
+                }
+                multiline
+              >
+                {loadingUserbotStatus ? (
+                  <div className="flex items-center gap-2">
+                    <Spinner size="s" />
+                    <span>Memuat status...</span>
+                  </div>
+                ) : userbotEnabled ? (
+                  "AI Assistant: Aktif"
+                ) : (
+                  "AI Assistant: Nonaktif"
+                )}
+              </Cell>
+            </Section>
+          </div>
+
+          {/* Tab Content */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
             {/* Tab Navigation */}
             <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">

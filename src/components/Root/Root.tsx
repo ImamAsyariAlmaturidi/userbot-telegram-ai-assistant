@@ -1,25 +1,26 @@
-'use client';
+"use client";
 
-import { type PropsWithChildren, useEffect } from 'react';
+import { type PropsWithChildren, useEffect } from "react";
 import {
   initData,
   miniApp,
   useLaunchParams,
   useSignal,
-} from '@telegram-apps/sdk-react';
-import { TonConnectUIProvider } from '@tonconnect/ui-react';
-import { AppRoot } from '@telegram-apps/telegram-ui';
+} from "@telegram-apps/sdk-react";
+import { TonConnectUIProvider } from "@tonconnect/ui-react";
+import { AppRoot } from "@telegram-apps/telegram-ui";
 
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ErrorPage } from '@/components/ErrorPage';
-import { useDidMount } from '@/hooks/useDidMount';
-import { setLocale } from '@/core/i18n/locale';
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorPage } from "@/components/ErrorPage";
+import { useDidMount } from "@/hooks/useDidMount";
+import { setLocale } from "@/core/i18n/locale";
 
-import './styles.css';
+import "./styles.css";
 
 function RootInner({ children }: PropsWithChildren) {
+  // useLaunchParams should work if mockEnv() ran successfully
+  // If it throws, ErrorBoundary will catch it
   const lp = useLaunchParams();
-
   const isDark = useSignal(miniApp.isDark);
   const initDataUser = useSignal(initData.user);
 
@@ -28,14 +29,14 @@ function RootInner({ children }: PropsWithChildren) {
     initDataUser && setLocale(initDataUser.language_code);
   }, [initDataUser]);
 
+  const platform =
+    lp?.tgWebAppPlatform && ["macos", "ios"].includes(lp.tgWebAppPlatform)
+      ? "ios"
+      : "base";
+
   return (
     <TonConnectUIProvider manifestUrl="/tonconnect-manifest.json">
-      <AppRoot
-        appearance={isDark ? 'dark' : 'light'}
-        platform={
-          ['macos', 'ios'].includes(lp.tgWebAppPlatform) ? 'ios' : 'base'
-        }
-      >
+      <AppRoot appearance={isDark ? "dark" : "light"} platform={platform}>
         {children}
       </AppRoot>
     </TonConnectUIProvider>

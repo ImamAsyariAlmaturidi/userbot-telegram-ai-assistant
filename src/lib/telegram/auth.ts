@@ -22,23 +22,8 @@ export async function checkAuthStatus(): Promise<{
     return { isAuthorized: false };
   }
 
-  // Cek session di database
-  try {
-    const user = await prisma.user.findFirst({
-      where: { session: sessionCookie },
-      select: { telegramUserId: true, session: true },
-    });
-
-    if (!user) {
-      console.log("[checkAuthStatus] Session not found in database");
-      return { isAuthorized: false };
-    }
-  } catch (err) {
-    console.error("[checkAuthStatus] Error checking database:", err);
-    return { isAuthorized: false };
-  }
-
-  // Validasi session dengan Telegram
+  // Validasi session dengan Telegram terlebih dahulu
+  // Ini lebih reliable karena Prisma bisa error di Vercel
   const client = createClientFromEnv(sessionCookie);
   try {
     await client.connect();
@@ -47,19 +32,35 @@ export async function checkAuthStatus(): Promise<{
     if (isAuthorized) {
       const sessionString = client.session.save();
 
-      // Update session di database jika berbeda
+      // Update session di database jika berbeda (non-blocking)
+      // Jangan return false jika database error, karena Telegram sudah valid
       try {
         const me = await client.getMe();
         const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
 
         if (telegramUserId) {
-          await prisma.user.updateMany({
-            where: { telegramUserId: telegramUserId },
-            data: { session: sessionString as unknown as string },
-          });
+          // Cek dulu apakah user ada di database
+          try {
+            const existingUser = await prisma.user.findUnique({
+              where: { telegramUserId: telegramUserId },
+              select: { session: true },
+            });
+
+            // Update jika ada, atau skip jika tidak ada (akan di-create saat login)
+            if (existingUser) {
+              await prisma.user.updateMany({
+                where: { telegramUserId: telegramUserId },
+                data: { session: sessionString as unknown as string },
+              });
+            }
+          } catch (dbErr) {
+            console.error("[checkAuthStatus] Error updating database:", dbErr);
+            // Jangan throw, karena Telegram auth sudah valid
+          }
         }
       } catch (err) {
-        console.error("Error updating session in database:", err);
+        console.error("[checkAuthStatus] Error getting user info:", err);
+        // Jangan return false, karena Telegram auth sudah valid
       }
 
       // NOTE: Userbot sekarang dijalankan sebagai proses terpisah via `bun run bot`
@@ -76,9 +77,28 @@ export async function checkAuthStatus(): Promise<{
       };
     }
 
+    // Session tidak valid di Telegram, hapus cookie
+    cookieStore.delete("tg_session");
+    cookieStore.delete("tg_phone_hash");
     return { isAuthorized: false };
   } catch (err) {
-    console.error("Error checking auth status:", err);
+    console.error("[checkAuthStatus] Error checking auth status:", err);
+    // Jika Telegram error, coba cek database sebagai fallback
+    try {
+      const user = await prisma.user.findFirst({
+        where: { session: sessionCookie },
+        select: { telegramUserId: true, session: true },
+      });
+      if (user) {
+        // Session ada di database, anggap masih valid
+        return {
+          isAuthorized: true,
+          sessionString: user.session,
+        };
+      }
+    } catch (dbErr) {
+      console.error("[checkAuthStatus] Database fallback also failed:", dbErr);
+    }
     return { isAuthorized: false };
   } finally {
     await client.disconnect();
@@ -88,7 +108,9 @@ export async function checkAuthStatus(): Promise<{
 /**
  * Send verification code to phone number
  */
-export async function sendCode(phoneNumber: string): Promise<void> {
+export async function sendCode(
+  phoneNumber: string
+): Promise<{ alreadyLoggedIn?: boolean }> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
   const client = createClientFromEnv(sessionCookie);
@@ -97,9 +119,46 @@ export async function sendCode(phoneNumber: string): Promise<void> {
     await client.connect();
 
     if (await client.isUserAuthorized()) {
+      // Update session cookie dengan yang valid
+      const sessionString = client.session.save();
+      const isProduction = process.env.NODE_ENV === "production";
+      cookieStore.set("tg_session", sessionString as unknown as string, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        maxAge: 60 * 60 * 24 * 7, // 7 hari
+        path: "/",
+      });
+
+      // Hapus phone hash jika ada
+      cookieStore.delete("tg_phone_hash");
+
+      // Coba save ke database (non-blocking)
+      try {
+        const me = await client.getMe();
+        const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
+        if (telegramUserId) {
+          await prisma.user.upsert({
+            where: { telegramUserId: telegramUserId },
+            update: {
+              session: sessionString as unknown as string,
+              phoneNumber: phoneNumber,
+            },
+            create: {
+              telegramUserId: telegramUserId,
+              session: sessionString as unknown as string,
+              phoneNumber: phoneNumber,
+            },
+          });
+        }
+      } catch (dbErr) {
+        console.error("[sendCode] Error saving to database:", dbErr);
+        // Jangan throw, karena user sudah login
+      }
+
       startBot(sessionCookie);
       console.log("✅ Already logged in — skip sendCode");
-      return;
+      return { alreadyLoggedIn: true };
     }
 
     console.log("📨 Sending code to", phoneNumber);
@@ -114,10 +173,11 @@ export async function sendCode(phoneNumber: string): Promise<void> {
 
     const sessionString = client.session.save();
     console.log("[sendCode] sessionString:", sessionString);
+    const isProduction = process.env.NODE_ENV === "production";
     cookieStore.set("tg_session", sessionString as unknown as string, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction, // HTTPS required in production
+      sameSite: isProduction ? "none" : "lax", // "none" for cross-site in production
       maxAge: 300,
       path: "/",
     });
@@ -130,14 +190,15 @@ export async function sendCode(phoneNumber: string): Promise<void> {
       (result as Api.auth.SentCode).phoneCodeHash,
       {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
         maxAge: 300,
         path: "/",
       }
     );
 
     console.log("✅ Code sent & session saved");
+    return { alreadyLoggedIn: false };
   } finally {
     await client.disconnect();
   }
@@ -190,11 +251,12 @@ export async function startClient(params: {
     }
 
     const sessionString = client.session.save();
+    const isProduction = process.env.NODE_ENV === "production";
     cookieStore.set("tg_session", sessionString as unknown as string, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
+      secure: isProduction, // HTTPS required in production
+      sameSite: isProduction ? "none" : "lax", // "none" for cross-site in production
+      maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
     });
     cookieStore.delete("tg_phone_hash" as unknown as string);
