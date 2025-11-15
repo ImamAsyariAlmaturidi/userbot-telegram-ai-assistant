@@ -114,10 +114,11 @@ export async function sendCode(phoneNumber: string): Promise<void> {
 
     const sessionString = client.session.save();
     console.log("[sendCode] sessionString:", sessionString);
+    const isProduction = process.env.NODE_ENV === "production";
     cookieStore.set("tg_session", sessionString as unknown as string, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction, // HTTPS required in production
+      sameSite: isProduction ? "none" : "lax", // "none" for cross-site in production
       maxAge: 300,
       path: "/",
     });
@@ -130,8 +131,8 @@ export async function sendCode(phoneNumber: string): Promise<void> {
       (result as Api.auth.SentCode).phoneCodeHash,
       {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
         maxAge: 300,
         path: "/",
       }
@@ -190,11 +191,12 @@ export async function startClient(params: {
     }
 
     const sessionString = client.session.save();
+    const isProduction = process.env.NODE_ENV === "production";
     cookieStore.set("tg_session", sessionString as unknown as string, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
+      secure: isProduction, // HTTPS required in production
+      sameSite: isProduction ? "none" : "lax", // "none" for cross-site in production
+      maxAge: 60 * 60 * 24 * 7, // 7 days
       path: "/",
     });
     cookieStore.delete("tg_phone_hash" as unknown as string);
