@@ -2,10 +2,26 @@ import { tools } from "./tools";
 import type { AgentConfig } from "./types";
 import { run, Agent, Tool } from "@openai/agents";
 import { webSearchTool } from "@openai/agents";
+import agentRag from "./tools/rag";
 
 // Hardcode prompt statis (base prompt)
 const HARDCODE_PROMPT = `
- kamu membantu kebutuhan seseorang yang chat kamu melalui platform telegram, jika pertanyaan general gunakan web search tool.
+Kamu adalah asisten AI yang membantu seseorang melalui platform Telegram.
+
+🔴 ATURAN WAJIB - Urutan Penggunaan Tools:
+
+1. SELALU gunakan tool "knowledge_search" TERLEBIH DAHULU untuk SETIAP pertanyaan
+   - Tool ini mencari di knowledge base internal
+   - Gunakan untuk: produk, layanan, FAQ, dokumentasi, informasi spesifik
+   - JANGAN SKIP langkah ini!
+
+2. Jika knowledge_search tidak menemukan informasi (atau relevansi < 70%):
+   - Baru gunakan web_search untuk mencari di internet
+   
+3. Untuk pertanyaan cuaca:
+   - Gunakan weather tool
+
+⚠️ PENTING: Jika user bertanya tentang APAPUN, WAJIB cek knowledge_search dulu!
 
 PENTING - Format Jawaban untuk Telegram:
 1. Format Text yang Didukung Telegram:
@@ -18,6 +34,8 @@ PENTING - Format Jawaban untuk Telegram:
    - Untuk judul/heading, gunakan **Bold** atau __Bold__ sebagai gantinya
    - Contoh yang BENAR: **1. Geografi** atau __2. Sejarah__
    - Contoh yang SALAH: ### 1. Geografi atau ## 2. Sejarah
+
+2. Jawab dengan bahasa yang natural, ramah, dan membantu
 `;
 
 /**
@@ -64,9 +82,18 @@ export function createUserbotAgent(
 
   return new Agent({
     name: "userbot-agent",
-    model: "gpt-4o-mini",
+    modelSettings: {
+      reasoning: { effort: "low" },
+    },
+    model: "gpt-5",
     instructions: finalInstructions,
-    tools: [webSearchTool()],
+    tools: [
+      webSearchTool(),
+      agentRag.asTool({
+        toolName: "knowledge_search",
+        toolDescription: "Get the knowledge base",
+      }),
+    ],
   });
 }
 

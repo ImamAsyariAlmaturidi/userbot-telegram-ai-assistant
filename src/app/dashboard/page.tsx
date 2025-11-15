@@ -2,22 +2,32 @@
 
 import { useState, useEffect } from "react";
 import { Page } from "@/components/Page";
-import { Button, Spinner, Snackbar } from "@telegram-apps/telegram-ui";
+import {
+  Spinner,
+  Snackbar,
+  Cell,
+  Switch,
+  Section,
+  Tabbar,
+  FixedLayout,
+  List,
+} from "@telegram-apps/telegram-ui";
 import { initDataState } from "@telegram-apps/sdk-react";
 import { useSignal } from "@telegram-apps/sdk-react";
 import { useRouter } from "next/navigation";
 import { getAuthStatus } from "@/core/api/auth";
-
-const DEFAULT_PROMPT =
-  "Kamu adalah Assistant dari STAR, kamu membantu kebutuhan seseorang yang chat kamu melalui platform telegram, jika pertanyaan general gunakan web search tool";
+import { PromptTab } from "./components/PromptTab";
+import { KnowledgeSourceTab } from "./components/KnowledgeSourceTab";
 
 export default function DashboardPage() {
   const router = useRouter();
   const initData = useSignal(initDataState);
-  const [customPrompt, setCustomPrompt] = useState(DEFAULT_PROMPT);
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"prompt" | "knowledge">("prompt");
   const [fetching, setFetching] = useState(true);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [userbotEnabled, setUserbotEnabled] = useState(true);
+  const [togglingUserbot, setTogglingUserbot] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
   const [snack, setSnack] = useState<{
     open: boolean;
     text: string;
@@ -49,28 +59,39 @@ export default function DashboardPage() {
     checkAuth();
   }, [router]);
 
-  // Fetch existing custom prompt
+  // Fetch existing custom prompt and userbot status
   useEffect(() => {
     if (!telegramUserId || checkingAuth) return;
 
-    const fetchPrompt = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(
+        // Fetch prompt
+        const promptResponse = await fetch(
           `/api/users/prompt?telegram_user_id=${telegramUserId}`
         );
-        const data = await response.json();
+        const promptData = await promptResponse.json();
 
-        if (data.success && data.custom_prompt) {
-          setCustomPrompt(data.custom_prompt);
+        if (promptData.success && promptData.custom_prompt) {
+          setCustomPrompt(promptData.custom_prompt);
+        }
+
+        // Fetch userbot status
+        const userbotResponse = await fetch(
+          `/api/userbot/toggle?telegram_user_id=${telegramUserId}`
+        );
+        const userbotData = await userbotResponse.json();
+
+        if (userbotData.success) {
+          setUserbotEnabled(userbotData.userbotEnabled);
         }
       } catch (error) {
-        console.error("Error fetching prompt:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setFetching(false);
       }
     };
 
-    fetchPrompt();
+    fetchData();
   }, [telegramUserId, checkingAuth]);
 
   // Save user data and init data when init data is available
@@ -102,7 +123,27 @@ export default function DashboardPage() {
     saveUserData();
   }, [initData, telegramUserId, checkingAuth]);
 
-  const handleSave = async () => {
+  const handlePromptSave = (prompt: string) => {
+    setCustomPrompt(prompt);
+  };
+
+  const handleSuccess = (message: string) => {
+    setSnack({
+      open: true,
+      text: message,
+      tone: "positive",
+    });
+  };
+
+  const handleError = (error: string) => {
+    setSnack({
+      open: true,
+      text: error,
+      tone: "critical",
+    });
+  };
+
+  const handleToggleUserbot = async (enabled: boolean) => {
     if (!telegramUserId) {
       setSnack({
         open: true,
@@ -112,44 +153,41 @@ export default function DashboardPage() {
       return;
     }
 
-    setLoading(true);
+    setTogglingUserbot(true);
     try {
-      const response = await fetch("/api/users/prompt", {
+      const response = await fetch("/api/userbot/toggle", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           telegram_user_id: telegramUserId,
-          custom_prompt: customPrompt.trim() || DEFAULT_PROMPT,
+          enabled: enabled,
         }),
       });
 
       const data = await response.json();
 
       if (data.success) {
+        setUserbotEnabled(data.userbotEnabled);
         setSnack({
           open: true,
-          text: "Prompt berhasil disimpan!",
+          text: `AI Userbot ${enabled ? "diaktifkan" : "dinonaktifkan"}`,
           tone: "positive",
         });
       } else {
-        throw new Error(data.error || "Gagal menyimpan prompt");
+        throw new Error(data.error || "Gagal mengubah status userbot");
       }
     } catch (error: any) {
-      console.error("Error saving prompt:", error);
+      console.error("Error toggling userbot:", error);
       setSnack({
         open: true,
-        text: error.message || "Gagal menyimpan prompt",
+        text: error.message || "Gagal mengubah status userbot",
         tone: "critical",
       });
     } finally {
-      setLoading(false);
+      setTogglingUserbot(false);
     }
-  };
-
-  const handleReset = () => {
-    setCustomPrompt(DEFAULT_PROMPT);
   };
 
   if (checkingAuth || fetching) {
@@ -212,86 +250,77 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content */}
-        <div className="max-w-4xl mx-auto px-4 pt-8">
-          {/* Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 space-y-6">
-            {/* Section Header */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Customize AI Prompt
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Atur prompt untuk AI assistant. Prompt ini akan digunakan untuk
-                merespons pesan di Telegram.
-              </p>
-            </div>
-
-            {/* Textarea */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Prompt AI Assistant
-              </label>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder={DEFAULT_PROMPT}
-                disabled={loading}
-                rows={10}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-y disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                {customPrompt.length} karakter
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Button
-                onClick={handleSave}
-                disabled={loading}
-                className="flex-1"
+        <div className="max-w-4xl mx-auto px-4 pt-8 pb-20">
+          {/* Userbot Toggle Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-6">
+            <Section
+              header="AI Userbot Status"
+              footer={
+                <p className="text-xs text-gray-500 dark:text-gray-400 px-4 py-2">
+                  {userbotEnabled
+                    ? "AI akan merespons pesan yang masuk"
+                    : "AI tidak akan merespons pesan"}
+                </p>
+              }
+            >
+              <Cell
+                Component="label"
+                after={
+                  <Switch
+                    checked={userbotEnabled}
+                    onChange={(e) => handleToggleUserbot(e.target.checked)}
+                    disabled={togglingUserbot}
+                  />
+                }
+                disabled={togglingUserbot}
+                description={
+                  userbotEnabled
+                    ? "AI aktif dan siap merespons"
+                    : "AI dinonaktifkan"
+                }
+                multiline
               >
-                {loading ? <Spinner size="s" /> : "Simpan Prompt"}
-              </Button>
-              <Button
-                onClick={handleReset}
-                disabled={loading}
-                mode="outline"
-                className="flex-1"
-              >
-                Reset ke Default
-              </Button>
-            </div>
+                {userbotEnabled ? "AI Userbot Aktif" : "AI Userbot Nonaktif"}
+              </Cell>
+            </Section>
           </div>
 
-          {/* Info Card */}
-          <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-            <div className="flex items-start space-x-3">
-              <svg
-                className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                  Tips
-                </p>
-                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  Buat prompt yang jelas dan spesifik. Prompt yang baik akan
-                  membantu AI memberikan respons yang lebih akurat dan relevan.
-                </p>
-              </div>
-            </div>
+          {/* Tab Content */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+            {activeTab === "prompt" && (
+              <PromptTab
+                telegramUserId={telegramUserId!}
+                initialPrompt={customPrompt}
+                onSave={handlePromptSave}
+                onError={handleError}
+                onSuccess={handleSuccess}
+              />
+            )}
+            {activeTab === "knowledge" && (
+              <KnowledgeSourceTab
+                telegramUserId={telegramUserId!}
+                onError={handleError}
+                onSuccess={handleSuccess}
+              />
+            )}
           </div>
         </div>
+
+        {/* Tabbar */}
+        <FixedLayout vertical="bottom">
+          <Tabbar>
+            <Tabbar.Item
+              selected={activeTab === "prompt"}
+              onClick={() => setActiveTab("prompt")}
+              text="Prompt"
+            />
+            <Tabbar.Item
+              selected={activeTab === "knowledge"}
+              onClick={() => setActiveTab("knowledge")}
+              text="Knowledge"
+            />
+          </Tabbar>
+        </FixedLayout>
       </div>
     </Page>
   );
