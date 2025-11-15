@@ -8,6 +8,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
+    "postinstall": "prisma generate",
     "bot": "bun run bot/run.ts",
     "bot:dev": "bun --watch bot/run.ts",
     "bot:node": "tsx bot/run.ts"
