@@ -22,7 +22,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const initData = useSignal(initDataState);
   const [activeTab, setActiveTab] = useState("prompt");
-  const [activeNav, setActiveNav] = useState("profile");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [userbotEnabled, setUserbotEnabled] = useState(false);
   const [loadingUserbotStatus, setLoadingUserbotStatus] = useState(true);
@@ -254,30 +253,6 @@ export default function DashboardPage() {
 
           {/* Tab Content */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
-            {/* Tab Navigation */}
-            <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => setActiveTab("prompt")}
-                className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
-                  activeTab === "prompt"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                }`}
-              >
-                Prompt
-              </button>
-              <button
-                onClick={() => setActiveTab("knowledge")}
-                className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
-                  activeTab === "knowledge"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                }`}
-              >
-                Knowledge Base
-              </button>
-            </div>
-
             {/* Tab Content */}
             {activeTab === "prompt" && (
               <PromptTab
@@ -301,12 +276,38 @@ export default function DashboardPage() {
                 }
               />
             )}
+            {activeTab === "profile" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                    Profile
+                  </h2>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                        <span className="text-white font-bold text-2xl">
+                          {userName.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {userName}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Telegram ID: {telegramUserId}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Bottom Navigation */}
-      <BottomNavigation activeTab={activeNav} onTabChange={setActiveNav} />
+      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </Page>
   );
 }

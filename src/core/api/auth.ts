@@ -9,9 +9,10 @@ export type VerifyCodeResponse = {
 };
 
 export async function sendLoginCode(
-  phoneNumber: string
+  phoneNumber: string,
+  telegramUserId?: string
 ): Promise<SendCodeResponse> {
-  console.log("[sendLoginCode] sending", { phoneNumber });
+  console.log("[sendLoginCode] sending", { phoneNumber, telegramUserId });
   // Use relative path; next.config rewrites to API_BASE_URL
   const res = await fetch(`/api/auth/send-code`, {
     method: "POST",
@@ -19,7 +20,10 @@ export async function sendLoginCode(
       "Content-Type": "application/json",
     },
     credentials: "include",
-    body: JSON.stringify({ phoneNumber }),
+    body: JSON.stringify({
+      phoneNumber,
+      telegram_user_id: telegramUserId,
+    }),
   });
   const data = await res.json().catch(() => ({}));
   console.log("[sendLoginCode] response", {

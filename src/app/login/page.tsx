@@ -6,10 +6,12 @@ import { Page } from "@/components/Page";
 import { Button, Spinner, Snackbar } from "@telegram-apps/telegram-ui";
 import { useTranslations } from "next-intl";
 import { sendLoginCode, getAuthStatus } from "@/core/api/auth";
+import { initDataState, useSignal } from "@telegram-apps/sdk-react";
 
 export default function LoginPage() {
   const t = useTranslations("login");
   const router = useRouter();
+  const initData = useSignal(initDataState);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -53,7 +55,63 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const data = await sendLoginCode(phoneNumber);
+      // Check if user exists in database before sending code
+      const telegramUserId = initData?.user?.id?.toString();
+      let userExists = false;
+
+      if (telegramUserId) {
+        try {
+          const checkRes = await fetch("/api/users/check", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              telegram_user_id: telegramUserId,
+              phone_number: phoneNumber,
+            }),
+          });
+
+          const checkData = await checkRes.json();
+          if (checkData?.exists && checkData?.hasSession) {
+            userExists = true;
+          }
+        } catch (err) {
+          console.error("[LoginPage] Error checking user:", err);
+        }
+      }
+
+      // If user exists, restore session and redirect
+      if (userExists) {
+        try {
+          // Restore session cookie
+          await fetch("/api/auth/restore-session", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              telegram_user_id: telegramUserId,
+            }),
+          });
+        } catch (err) {
+          console.error("[LoginPage] Error restoring session:", err);
+        }
+
+        setSnack({
+          open: true,
+          text: "Anda sudah terdaftar, mengarahkan ke dashboard...",
+          tone: "positive",
+        });
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 1000);
+        setLoading(false);
+        return;
+      }
+
+      const data = await sendLoginCode(phoneNumber, telegramUserId);
       console.log("[LoginPage] Send code response:", data);
 
       // Jika sudah login, langsung redirect ke dashboard
