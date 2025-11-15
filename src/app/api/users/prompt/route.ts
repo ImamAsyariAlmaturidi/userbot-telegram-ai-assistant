@@ -14,16 +14,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const userId = BigInt(parseInt(telegram_user_id, 10));
+    const supabase = createServerClient();
 
-    const user = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { customPrompt: true },
-    });
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Supabase is not configured" },
+        { status: 503 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("custom_prompt")
+      .eq("telegram_user_id", parseInt(telegram_user_id))
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
-      custom_prompt: user?.customPrompt || null,
+      custom_prompt: data?.custom_prompt || null,
     });
   } catch (error: any) {
     console.error("Error getting custom prompt:", error);
@@ -47,13 +59,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userId = BigInt(parseInt(telegram_user_id, 10));
+    const supabase = createServerClient();
+
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Supabase is not configured" },
+        { status: 503 }
+      );
+    }
 
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { id: true },
-    });
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("telegram_user_id", telegram_user_id)
+      .single();
 
     if (!existingUser) {
       return NextResponse.json(
@@ -67,21 +87,28 @@ export async function POST(req: NextRequest) {
     );
     console.log(`[API] Prompt length: ${custom_prompt?.length || 0}`);
 
-    const result = await prisma.user.update({
-      where: { telegramUserId: userId },
-      data: { customPrompt: custom_prompt || null },
-      select: { customPrompt: true, telegramUserId: true },
-    });
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        custom_prompt: custom_prompt || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("telegram_user_id", telegram_user_id)
+      .select("custom_prompt, telegram_user_id")
+      .single();
+
+    if (error) {
+      console.error("[API] Error updating prompt:", error);
+      throw error;
+    }
 
     console.log(
-      `[API] Prompt updated successfully for telegram_user_id: ${Number(
-        result.telegramUserId
-      )}`
+      `[API] Prompt updated successfully for telegram_user_id: ${data.telegram_user_id}`
     );
 
     return NextResponse.json({
       success: true,
-      custom_prompt: result.customPrompt,
+      custom_prompt: data.custom_prompt,
     });
   } catch (error: any) {
     console.error("Error updating custom prompt:", error);

@@ -20,13 +20,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const supabase = createServerClient();
+
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Supabase is not configured" },
+        { status: 503 }
+      );
+    }
+
     // Ensure telegram_user_id is a number
     const userId =
       typeof telegram_user_id === "string"
-        ? BigInt(parseInt(telegram_user_id, 10))
-        : BigInt(telegram_user_id);
+        ? parseInt(telegram_user_id, 10)
+        : Number(telegram_user_id);
 
-    if (isNaN(Number(userId))) {
+    if (isNaN(userId)) {
       return NextResponse.json(
         { error: "Invalid telegram_user_id" },
         { status: 400 }
@@ -35,38 +44,20 @@ export async function POST(req: NextRequest) {
 
     console.log(`[API] Saving user data for telegram_user_id: ${userId}`);
 
-    // Get session from cookie (required)
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
-
-    if (!sessionCookie) {
-      return NextResponse.json(
-        { error: "Session is required. Please login first." },
-        { status: 401 }
-      );
-    }
-
-    // Validate phone_number (required)
-    if (!phone_number) {
-      return NextResponse.json(
-        { error: "phone_number is required" },
-        { status: 400 }
-      );
-    }
-
     // Check if user exists
-    const existingUser = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { id: true, telegramUserId: true, session: true },
-    });
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id, telegram_user_id")
+      .eq("telegram_user_id", userId)
+      .single();
 
     const userData = {
-      telegramUserId: userId,
-      phoneNumber: phone_number,
-      session: sessionCookie,
-      initDataRaw: init_data_raw || null,
-      initDataUser: init_data_user || null,
-      initDataChat: init_data_chat || null,
+      telegram_user_id: userId,
+      phone_number: phone_number || null,
+      init_data_raw: init_data_raw || null,
+      init_data_user: init_data_user || null,
+      init_data_chat: init_data_chat || null,
+      updated_at: new Date().toISOString(),
     };
 
     let result;
@@ -75,27 +66,32 @@ export async function POST(req: NextRequest) {
       console.log(
         `[API] Updating existing user with telegram_user_id: ${userId}`
       );
-      result = await prisma.user.update({
-        where: { telegramUserId: userId },
-        data: userData,
-        select: { telegramUserId: true, customPrompt: true },
-      });
+      const { data, error } = await supabase
+        .from("users")
+        .update(userData)
+        .eq("telegram_user_id", userId)
+        .select("telegram_user_id, custom_prompt")
+        .single();
+
+      if (error) throw error;
+      result = data;
     } else {
       // Insert new user
       console.log(`[API] Inserting new user with telegram_user_id: ${userId}`);
-      result = await prisma.user.create({
-        data: userData,
-        select: { telegramUserId: true, customPrompt: true },
-      });
+      const { data, error } = await supabase
+        .from("users")
+        .insert({
+          ...userData,
+          created_at: new Date().toISOString(),
+        })
+        .select("telegram_user_id, custom_prompt")
+        .single();
+
+      if (error) throw error;
+      result = data;
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        telegram_user_id: Number(result.telegramUserId),
-        custom_prompt: result.customPrompt,
-      },
-    });
+    return NextResponse.json({ success: true, data: result });
   } catch (error: any) {
     console.error("Error saving user data:", error);
     return NextResponse.json(

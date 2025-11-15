@@ -8,13 +8,23 @@ export async function getCustomPrompt(
   telegramUserId: number | string
 ): Promise<string | null> {
   try {
+    const supabase = createServerClient();
+
+    if (!supabase) {
+      // Supabase not configured, return null to use default prompt
+      console.log(
+        "[getCustomPrompt] Supabase not configured, using default prompt"
+      );
+      return null;
+    }
+
     // Ensure we have a valid number
     const userId =
       typeof telegramUserId === "string"
-        ? BigInt(parseInt(telegramUserId, 10))
-        : BigInt(telegramUserId);
+        ? parseInt(telegramUserId, 10)
+        : Number(telegramUserId);
 
-    if (isNaN(Number(userId))) {
+    if (isNaN(userId)) {
       console.error(
         `[getCustomPrompt] Invalid telegram_user_id: ${telegramUserId}`
       );
@@ -25,23 +35,29 @@ export async function getCustomPrompt(
       `[getCustomPrompt] Fetching prompt for telegram_user_id: ${userId} (original: ${telegramUserId}, type: ${typeof telegramUserId})`
     );
 
-    const user = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { customPrompt: true },
-    });
+    const { data, error } = await supabase
+      .from("users")
+      .select("custom_prompt")
+      .eq("telegram_user_id", userId)
+      .single();
 
-    if (!user) {
-      console.log(
-        `[getCustomPrompt] No custom prompt found for user ${userId}, using default`
-      );
+    if (error) {
+      if (error.code === "PGRST116") {
+        // No rows returned - user not found
+        console.log(
+          `[getCustomPrompt] No custom prompt found for user ${userId}, using default`
+        );
+        return null;
+      }
+      console.error("[getCustomPrompt] Error fetching custom prompt:", error);
       return null;
     }
 
-    if (user.customPrompt) {
+    if (data?.custom_prompt) {
       console.log(
-        `[getCustomPrompt] Found custom prompt for user ${userId} (length: ${user.customPrompt.length})`
+        `[getCustomPrompt] Found custom prompt for user ${userId} (length: ${data.custom_prompt.length})`
       );
-      return user.customPrompt;
+      return data.custom_prompt;
     }
 
     console.log(
