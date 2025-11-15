@@ -12,6 +12,7 @@
 import http from "http";
 import { startUserbot } from "../src/lib/telegram/userbot";
 import { prisma } from "../src/lib/prisma";
+import { retryPrismaOperation } from "../src/lib/prisma/retry";
 import { AIMessageHandler } from "../src/lib/telegram/handlers/aiMessageHandler";
 
 // Simpan client yang sedang jalan: key = telegramUserId (string)
@@ -99,22 +100,43 @@ async function startUserbotForUser(
  * Ambil semua user yang userbotEnabled=true dan punya session
  */
 async function getEnabledUsersWithSession() {
-  const users = await prisma.user.findMany({
-    where: {
-      userbotEnabled: true,
-    },
-    select: {
-      telegramUserId: true,
-      session: true,
-    },
-  });
+  try {
+    // Use retry mechanism for connection errors
+    const users = await retryPrismaOperation(
+      () =>
+        prisma.user.findMany({
+          where: {
+            userbotEnabled: true,
+          },
+          select: {
+            telegramUserId: true,
+            session: true,
+          },
+        }),
+      {
+        maxRetries: 2,
+        retryDelay: 1000,
+      }
+    );
 
-  const usersWithSession = users.filter(
-    (u: { telegramUserId: bigint; session: string | null }) =>
-      u.session !== null
-  );
+    const usersWithSession = users.filter(
+      (u: { telegramUserId: bigint; session: string | null }) =>
+        u.session !== null
+    );
 
-  return usersWithSession;
+    return usersWithSession;
+  } catch (error: any) {
+    // Database connection error - return empty array to prevent crashes
+    if (error?.code === "P1001" || error?.code === "P1017") {
+      console.warn(
+        "[getEnabledUsersWithSession] Database connection error, returning empty array:",
+        error?.code
+      );
+    } else {
+      console.error("[getEnabledUsersWithSession] Error:", error);
+    }
+    return []; // Return empty array to prevent crashes
+  }
 }
 
 /**
@@ -206,6 +228,13 @@ async function watchUserbotStatus() {
     try {
       const usersWithSession = await getEnabledUsersWithSession();
 
+      // If database is unavailable, skip this cycle
+      if (usersWithSession.length === 0) {
+        // This could be either no enabled users OR database error
+        // We'll continue with existing userbots
+        return;
+      }
+
       const enabledIds = new Set(
         usersWithSession.map((u) => String(u.telegramUserId))
       );
@@ -284,8 +313,17 @@ async function watchUserbotStatus() {
           runningUserbots.delete(userId);
         }
       }
-    } catch (error) {
-      console.error("❌ Error watching userbot status:", error);
+    } catch (error: any) {
+      // Database connection errors are handled in getEnabledUsersWithSession
+      // Other errors should be logged but not crash the monitoring
+      if (error?.code === "P1001" || error?.code === "P1017") {
+        console.warn(
+          "[watchUserbotStatus] Database connection error, will retry next cycle:",
+          error?.code
+        );
+      } else {
+        console.error("❌ Error watching userbot status:", error);
+      }
     }
   }, 30000); // Check every 30 seconds
 }

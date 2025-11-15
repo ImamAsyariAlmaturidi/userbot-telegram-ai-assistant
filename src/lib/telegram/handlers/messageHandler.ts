@@ -225,16 +225,35 @@ export function createMessageHandler(
     if (ownerUserId) {
       try {
         const { prisma } = await import("@/lib/prisma");
+        const { retryPrismaOperation } = await import("@/lib/prisma/retry");
 
         const ownerId = BigInt(parseInt(ownerUserId, 10));
-        const user = await prisma.user.findUnique({
-          where: { telegramUserId: ownerId },
-          select: { userbotEnabled: true },
-        });
+        const user = await retryPrismaOperation(
+          () =>
+            prisma.user.findUnique({
+              where: { telegramUserId: ownerId },
+              select: { userbotEnabled: true },
+            }),
+          {
+            maxRetries: 1,
+            retryDelay: 500,
+          }
+        );
 
         if (!user?.userbotEnabled) return;
-      } catch (err) {
-        console.error("Userbot toggle check failed:", err);
+      } catch (err: any) {
+        // Database connection error - continue processing if it's a connection issue
+        // This allows the bot to keep working even if database is temporarily unavailable
+        if (err?.code === "P1001" || err?.code === "P1017") {
+          console.warn(
+            "[MessageHandler] Database connection error after retries, continuing without userbot toggle check:",
+            err?.code
+          );
+          // Continue processing - assume userbot is enabled if we can't check
+        } else {
+          console.error("Userbot toggle check failed:", err);
+          // For other errors, also continue to avoid blocking messages
+        }
       }
     }
 
