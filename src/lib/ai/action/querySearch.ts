@@ -67,7 +67,7 @@ export async function searchKnowledge(
     );
 
     // 3. Format hasil
-    const formattedResults: SearchResult[] = results.map((row) => ({
+    const formattedResults: SearchResult[] = results.map((row: any) => ({
       id: row.id,
       content: row.content,
       similarity: parseFloat(row.similarity.toFixed(4)),
@@ -139,7 +139,7 @@ export async function searchKnowledgeWithFunction(
     );
 
     // 3. Format hasil
-    const formattedResults: SearchResult[] = results.map((row) => ({
+    const formattedResults: SearchResult[] = results.map((row: any) => ({
       id: row.id,
       content: row.content,
       similarity: parseFloat(row.similarity.toFixed(4)),

@@ -5,59 +5,40 @@ import { prisma } from "@/lib/prisma";
  * Returns null if no custom prompt is set (will use default)
  */
 export async function getCustomPrompt(
-  telegramUserId: number | string
+  telegramUserId: number | string | bigint
 ): Promise<string | null> {
   try {
-    const supabase = createServerClient();
-
-    if (!supabase) {
-      // Supabase not configured, return null to use default prompt
-      console.log(
-        "[getCustomPrompt] Supabase not configured, using default prompt"
-      );
-      return null;
-    }
-
-    // Ensure we have a valid number
-    const userId =
-      typeof telegramUserId === "string"
-        ? parseInt(telegramUserId, 10)
-        : Number(telegramUserId);
-
-    if (isNaN(userId)) {
-      console.error(
-        `[getCustomPrompt] Invalid telegram_user_id: ${telegramUserId}`
-      );
-      return null;
+    // Ensure we have a valid BigInt
+    let userId: bigint;
+    if (typeof telegramUserId === "bigint") {
+      userId = telegramUserId;
+    } else if (typeof telegramUserId === "string") {
+      userId = BigInt(parseInt(telegramUserId, 10));
+    } else {
+      userId = BigInt(telegramUserId);
     }
 
     console.log(
-      `[getCustomPrompt] Fetching prompt for telegram_user_id: ${userId} (original: ${telegramUserId}, type: ${typeof telegramUserId})`
+      `[getCustomPrompt] Fetching prompt for telegram_user_id: ${userId}`
     );
 
-    const { data, error } = await supabase
-      .from("users")
-      .select("custom_prompt")
-      .eq("telegram_user_id", userId)
-      .single();
+    const user = await prisma.user.findUnique({
+      where: { telegramUserId: userId },
+      select: { customPrompt: true },
+    });
 
-    if (error) {
-      if (error.code === "PGRST116") {
-        // No rows returned - user not found
-        console.log(
-          `[getCustomPrompt] No custom prompt found for user ${userId}, using default`
-        );
-        return null;
-      }
-      console.error("[getCustomPrompt] Error fetching custom prompt:", error);
+    if (!user) {
+      console.log(
+        `[getCustomPrompt] User not found for ${userId}, using default prompt`
+      );
       return null;
     }
 
-    if (data?.custom_prompt) {
+    if (user.customPrompt) {
       console.log(
-        `[getCustomPrompt] Found custom prompt for user ${userId} (length: ${data.custom_prompt.length})`
+        `[getCustomPrompt] Found custom prompt for user ${userId} (length: ${user.customPrompt.length})`
       );
-      return data.custom_prompt;
+      return user.customPrompt;
     }
 
     console.log(
