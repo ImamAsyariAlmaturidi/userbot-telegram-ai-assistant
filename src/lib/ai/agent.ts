@@ -63,21 +63,40 @@ Jika user memberikan custom style, tone, persona, atau greeting:
 // 3. BASE TOOL RULES
 // ==============================================
 const TOOL_RULES = `
-🔧 TOOL USAGE RULES:
+🔧 TOOL USAGE RULES (WAJIB DIIKUTI):
 
 1. Jangan gunakan tools untuk:
-   - greeting
-   - small talk
-   - pertanyaan umum yang jawabannya sudah ada di custom instructions
+   - greeting: "hi", "halo", "apa kabar"
+   - small talk: "terima kasih", "makasih"
+   - Untuk ini, LANGSUNG jawab tanpa tool!
 
-2. Gunakan \`knowledge_search\` HANYA untuk:
-   - informasi produk/layanan spesifik yang ada di knowledge base
-   - hanya sekali per pesan
-   - query harus mencerminkan inti pertanyaan
+2. WAJIB gunakan \`knowledge_search\` untuk:
+   - SETIAP pertanyaan tentang produk, layanan, fitur, atau informasi spesifik
+   - SETIAP pertanyaan tentang HARGA, BIAYA, TARIF, PAKET, atau PRICING
+   - SETIAP pertanyaan yang memerlukan informasi faktual tentang bisnis/layanan
+   - FAQ atau informasi yang tersimpan di knowledge base
+   - PENTING: SELALU cek knowledge_search DULU sebelum menjawab pertanyaan spesifik!
 
-3. Jika KB tidak menemukan data:
-   - jawab berdasarkan custom instructions
-   - jangan paksa menggunakan tools
+3. Aturan knowledge_search (SANGAT PENTING):
+   - SELALU gunakan knowledge_search untuk pertanyaan tentang produk, layanan, harga, paket
+   - Gunakan query yang spesifik dan mencakup inti pertanyaan
+   - Jika knowledge_search menemukan hasil → GUNAKAN informasi tersebut sebagai sumber utama
+   - JANGAN memberikan informasi (terutama harga) yang TIDAK ADA di knowledge_search
+   - Jika knowledge_search tidak menemukan → Jangan mengarang, katakan informasi tidak tersedia
+   - JANGAN pernah mengarang atau menebak harga/informasi jika tidak ada di knowledge_search!
+
+4. ATURAN HARGA (WAJIB DIIKUTI):
+   - JANGAN memberikan harga yang tidak ada di knowledge_search
+   - JANGAN mengarang atau menebak harga
+   - JIKA user bertanya tentang harga dan knowledge_search tidak menemukan:
+     → Katakan: "Maaf, informasi harga tidak tersedia di knowledge base. Silakan hubungi admin untuk informasi lebih lanjut."
+   - SELALU cek knowledge_search terlebih dahulu sebelum memberikan informasi harga
+
+5. WORKFLOW WAJIB:
+   - User bertanya tentang produk/layanan/harga/paket → GUNAKAN knowledge_search DULU
+   - Jika knowledge_search menemukan → GUNAKAN informasi tersebut
+   - Jika knowledge_search TIDAK menemukan → Jangan mengarang, katakan informasi tidak tersedia
+   - JANGAN pernah memberikan harga/informasi yang tidak ada di knowledge_search!
 `;
 
 // ==============================================
@@ -108,6 +127,12 @@ ${TELEGRAM_RULES}
 - Selalu berikan next step di setiap pesan
 - Gunakan style default *kecuali* user override di custom instructions
 - Jangan pernah mengabaikan custom instructions user
+
+🚨 PRIORITAS INFORMASI (WAJIB):
+1. Knowledge Search → Sumber utama untuk informasi faktual (produk, layanan, harga, paket)
+2. Custom Instructions → Konteks bisnis dan gaya komunikasi
+3. Web Search → Hanya jika knowledge_search tidak menemukan dan diperlukan
+4. JANGAN mengarang informasi, terutama harga!
 `;
 
 // =====================================================
@@ -178,7 +203,8 @@ ${customInstructions.trim()}
       webSearchTool(),
       agentRag.asTool({
         toolName: "knowledge_search",
-        toolDescription: "Query the knowledge base",
+        toolDescription:
+          "WAJIB digunakan untuk mencari informasi spesifik di knowledge base (produk, layanan, harga, paket, FAQ). GUNAKAN untuk SETIAP pertanyaan tentang produk, layanan, harga, biaya, tarif, paket. JANGAN memberikan informasi (terutama harga) yang tidak ditemukan di knowledge base.",
       }),
     ],
   });

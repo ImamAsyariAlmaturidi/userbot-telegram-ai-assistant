@@ -6,7 +6,7 @@ const ragTool = tool({
   name: "get_knowledge_base",
 
   description:
-    "Mencari informasi spesifik di knowledge base internal (produk, layanan, FAQ, dokumentasi). JANGAN gunakan untuk greeting/small talk seperti 'hi', 'halo', 'apa kabar'. Hanya gunakan untuk pertanyaan yang memerlukan informasi spesifik dari knowledge base. Gunakan HANYA SEKALI per pesan dengan query yang mencakup inti pertanyaan.",
+    "WAJIB digunakan untuk mencari informasi spesifik di knowledge base internal (produk, layanan, harga, paket, FAQ, dokumentasi). GUNAKAN untuk SETIAP pertanyaan tentang produk, layanan, harga, biaya, tarif, paket, atau informasi spesifik. JANGAN gunakan untuk greeting/small talk seperti 'hi', 'halo', 'apa kabar'. SELALU gunakan untuk pertanyaan yang memerlukan informasi faktual. Gunakan query yang spesifik dan mencakup inti pertanyaan. JANGAN memberikan informasi (terutama harga) yang tidak ditemukan di knowledge base.",
   parameters: z.object({
     query: z.string().describe("Pertanyaan atau kata kunci untuk dicari"),
   }),
