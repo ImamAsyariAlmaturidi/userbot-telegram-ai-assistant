@@ -27,6 +27,8 @@
     "eruda": "^3.0.1",
     "input": "^1.0.1",
     "langchain": "^1.0.4",
+    "mongoose": "^8.0.0",
+    "mongose": "^0.0.2-security",
     "next": "^16.0.1",
     "next-intl": "^4.1.0",
     "normalize.css": "^8.0.1",
