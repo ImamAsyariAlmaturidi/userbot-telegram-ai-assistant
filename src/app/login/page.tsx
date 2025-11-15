@@ -54,6 +54,22 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const data = await sendLoginCode(phoneNumber);
+      console.log("[LoginPage] Send code response:", data);
+
+      // Jika sudah login, langsung redirect ke dashboard
+      if (data?.alreadyLoggedIn) {
+        setSnack({
+          open: true,
+          text: "Anda sudah login, mengarahkan ke dashboard...",
+          tone: "positive",
+        });
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 1000);
+        setLoading(false);
+        return;
+      }
+
       console.log("[LoginPage] Code sent successfully, redirecting to verify");
 
       if (typeof window !== "undefined") {

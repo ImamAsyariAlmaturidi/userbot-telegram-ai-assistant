@@ -1,5 +1,6 @@
 export type SendCodeResponse = {
   message?: string;
+  alreadyLoggedIn?: boolean;
 };
 
 export type VerifyCodeResponse = {

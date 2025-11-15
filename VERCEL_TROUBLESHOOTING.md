@@ -56,3 +56,59 @@
 - Cookie harus menggunakan `sameSite: "none"` untuk cross-site
 - Cookie harus `secure: true` (HTTPS required)
 - Jangan set `domain` pada cookie (biarkan browser handle)
+
+## Masalah: Prisma Engine Not Found di Vercel
+
+### Error:
+
+```
+Prisma Client could not locate the Query Engine for runtime "rhel-openssl-3.0.x"
+```
+
+### Penyebab:
+
+Vercel menggunakan runtime RHEL-based, tapi `schema.prisma` tidak include binary target untuk RHEL.
+
+### Solusi:
+
+1. **Update `prisma/schema.prisma`:**
+
+   ```prisma
+   generator client {
+     provider        = "prisma-client"
+     output          = "../src/generated/prisma"
+     previewFeatures = ["postgresqlExtensions"]
+     binaryTargets   = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
+   }
+   ```
+
+2. **Regenerate Prisma Client:**
+
+   ```bash
+   npx prisma generate
+   ```
+
+3. **Commit dan Deploy:**
+
+   ```bash
+   git add prisma/schema.prisma src/generated/prisma
+   git commit -m "fix: add rhel-openssl-3.0.x binary target for Vercel"
+   git push
+   ```
+
+4. **Pastikan Build Script:**
+   Di `package.json`, pastikan build script include `prisma generate`:
+   ```json
+   {
+     "scripts": {
+       "build": "prisma generate && next build"
+     }
+   }
+   ```
+
+### Catatan:
+
+- Binary target `rhel-openssl-3.0.x` diperlukan untuk Vercel serverless functions
+- `native` untuk development lokal
+- `debian-openssl-3.0.x` untuk kompatibilitas dengan beberapa deployment platform
+- Setelah update, Prisma akan generate engine untuk semua binary targets yang di-specify
