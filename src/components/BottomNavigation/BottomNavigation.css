@@ -1,0 +1,88 @@
+.bottom-navigation {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background-color: rgba(31, 41, 55, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 8px 4px;
+  z-index: 1000;
+  border-radius: 20px;
+  max-width: calc(100% - 16px);
+  width: calc(100% - 16px);
+  margin: 0 8px 8px 8px;
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  min-width: 0;
+}
+
+.bottom-nav-item:active {
+  transform: scale(0.95);
+}
+
+.bottom-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #9ca3af;
+  transition: color 0.2s ease;
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+  color: #ffffff;
+}
+
+.bottom-nav-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bottom-nav-item.active .bottom-nav-label {
+  color: #ffffff;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: light) {
+  .bottom-navigation {
+    background-color: rgba(249, 250, 251, 0.95);
+    border-top: 1px solid rgba(229, 231, 235, 0.5);
+  }
+
+  .bottom-nav-icon {
+    color: #6b7280;
+  }
+
+  .bottom-nav-item.active .bottom-nav-icon {
+    color: #111827;
+  }
+
+  .bottom-nav-label {
+    color: #6b7280;
+  }
+
+  .bottom-nav-item.active .bottom-nav-label {
+    color: #111827;
+  }
+}

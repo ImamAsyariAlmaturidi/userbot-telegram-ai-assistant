@@ -16,11 +16,13 @@ import { useRouter } from "next/navigation";
 import { getAuthStatus } from "@/core/api/auth";
 import { PromptTab } from "./components/PromptTab";
 import { KnowledgeSourceTab } from "./components/KnowledgeSourceTab";
+import { BottomNavigation } from "@/components/BottomNavigation/BottomNavigation";
 
 export default function DashboardPage() {
   const router = useRouter();
   const initData = useSignal(initDataState);
   const [activeTab, setActiveTab] = useState("prompt");
+  const [activeNav, setActiveNav] = useState("profile");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [userbotEnabled, setUserbotEnabled] = useState(false);
   const [loadingUserbotStatus, setLoadingUserbotStatus] = useState(true);
@@ -188,7 +190,7 @@ export default function DashboardPage() {
         </Snackbar>
       )}
 
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 pb-8">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 pb-24">
         {/* Header */}
         <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
           <div className="max-w-4xl mx-auto px-4 py-6">
@@ -302,6 +304,9 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation activeTab={activeNav} onTabChange={setActiveNav} />
     </Page>
   );
 }
