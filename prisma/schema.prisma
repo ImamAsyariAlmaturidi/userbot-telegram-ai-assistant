@@ -3,7 +3,6 @@ generator client {
   previewFeatures = ["postgresqlExtensions"]
 }
 
-
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
