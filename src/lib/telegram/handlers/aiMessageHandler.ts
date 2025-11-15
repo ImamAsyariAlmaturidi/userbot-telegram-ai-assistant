@@ -114,12 +114,43 @@ export class AIMessageHandler implements MessageHandler {
       // Run agent with session for conversation history
       // When using session, include sender context in the message
       // Session automatically handles conversation history
-      const response = await Promise.race([
-        session
-          ? run(agent, userMessage, { session })
-          : run(agent, contextMessage),
-        timeoutPromise,
-      ]);
+      let response;
+      try {
+        response = await Promise.race([
+          session
+            ? run(agent, userMessage, { session })
+            : run(agent, contextMessage),
+          timeoutPromise,
+        ]);
+      } catch (error: any) {
+        // Handle 404 error (conversation not found) - retry without session
+        if (error?.status === 404 && session) {
+          console.warn(
+            "[AIMessageHandler] Conversation not found, retrying without session"
+          );
+          // Clear session and retry without it
+          if (this.ownerUserId) {
+            try {
+              await threadManager.clearSession(
+                this.ownerUserId,
+                String(context.senderId)
+              );
+            } catch (clearError) {
+              console.error(
+                "[AIMessageHandler] Error clearing session:",
+                clearError
+              );
+            }
+          }
+          // Retry without session
+          response = await Promise.race([
+            run(agent, contextMessage),
+            timeoutPromise,
+          ]);
+        } else {
+          throw error;
+        }
+      }
 
       const aiResponse = (response.finalOutput as unknown as string) || "";
 

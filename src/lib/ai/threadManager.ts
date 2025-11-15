@@ -57,17 +57,17 @@ class ThreadManager {
       return this.sessionStore.get(sessionKey)!;
     }
 
-    // Create new session with valid conversation ID
+    // Create new session without conversationId
+    // OpenAI will auto-generate conversationId on first message
+    // We don't provide conversationId initially to avoid 404 errors
     try {
-      const conversationId = this.getConversationId(sessionKey);
       const session = new OpenAIConversationsSession({
-        conversationId: conversationId, // Use valid conversation ID format
+        // Don't provide conversationId - let OpenAI create it automatically
+        // conversationId will be created when first message is sent
       });
 
       this.sessionStore.set(sessionKey, session);
-      console.log(
-        `[ThreadManager] Created new session: ${sessionKey} -> ${conversationId}`
-      );
+      console.log(`[ThreadManager] Created new session: ${sessionKey}`);
       return session;
     } catch (error) {
       console.error("[ThreadManager] Error creating session:", error);
