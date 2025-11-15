@@ -3,8 +3,10 @@ import createNextIntlPlugin from "next-intl/plugin";
 const withNextIntl = createNextIntlPlugin("./src/core/i18n/i18n.ts");
 
 const nextConfig = {
-  // Removed rewrites - Next.js handles /api routes directly
-  // Rewrites were causing cookie and redirect issues in production
+  experimental: {
+    // Wajib buat Prisma di serverless/standalone
+    serverComponentsExternalPackages: ["@prisma/client", "prisma"],
+  },
 };
 
 export default withNextIntl(nextConfig);
