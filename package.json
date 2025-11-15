@@ -5,9 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "dev:https": "next dev --experimental-https",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@langchain/anthropic": "^0.2.18",
