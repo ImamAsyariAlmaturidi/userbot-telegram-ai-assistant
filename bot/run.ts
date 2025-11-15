@@ -3,109 +3,137 @@
 /**
  * Standalone Userbot Worker
  *
- * Runs userbot as a separate process, independent from Next.js
- * This prevents issues with:
- * - Next.js hot reload restarting userbot
- * - Server restart causing connection drops
- * - ECONNRESET errors from reconnection bursts
+ * Runs userbot as a separate process, independent from Next.js.
+ * Cocok untuk:
+ * - Render Web Service (FREE tier) dengan health check HTTP
+ * - Multi-user userbot: satu session per user
  */
 
+import http from "http";
 import { startUserbot } from "../src/lib/telegram/userbot";
 import { prisma } from "../src/lib/prisma";
 import { AIMessageHandler } from "../src/lib/telegram/handlers/aiMessageHandler";
-import http from "http";
 
-// Track running userbots
-const runningUserbots = new Map<string, any>();
+// Simpan client yang sedang jalan: key = telegramUserId (string)
+type UserbotClient = any;
+const runningUserbots = new Map<string, UserbotClient>();
+
+// Config retry
+const MAX_START_RETRIES = 3;
+const RETRY_DELAY_MS = 5_000; // 5 detik
 
 /**
- * Start userbot for a specific user
+ * Utility kecil: delay
  */
-async function startUserbotForUser(sessionString: string, ownerUserId: string) {
-  try {
-    console.log(`🚀 Starting userbot for user: ${ownerUserId}`);
-
-    const client = await startUserbot({
-      sessionString,
-      handler: new AIMessageHandler(ownerUserId),
-    });
-
-    runningUserbots.set(ownerUserId, client);
-    console.log(`✅ Userbot started successfully for user: ${ownerUserId}`);
-
-    return client;
-  } catch (error: any) {
-    console.error(
-      `❌ Failed to start userbot for user ${ownerUserId}:`,
-      error.message
-    );
-    throw error;
-  }
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Load all enabled userbots from database and start them
+ * Start userbot untuk 1 user dengan retry sederhana
+ */
+async function startUserbotForUser(
+  sessionString: string,
+  ownerUserId: string
+): Promise<UserbotClient | null> {
+  let attempt = 0;
+  while (attempt < MAX_START_RETRIES) {
+    attempt += 1;
+    try {
+      console.log(
+        `🚀 [${ownerUserId}] Starting userbot (attempt ${attempt}/${MAX_START_RETRIES})`
+      );
+
+      const client = await startUserbot({
+        sessionString,
+        handler: new AIMessageHandler(ownerUserId),
+      });
+
+      runningUserbots.set(ownerUserId, client);
+      console.log(`✅ [${ownerUserId}] Userbot started successfully`);
+
+      return client;
+    } catch (error: any) {
+      console.error(
+        `❌ [${ownerUserId}] Failed to start userbot (attempt ${attempt}):`,
+        error?.message ?? error
+      );
+
+      if (attempt >= MAX_START_RETRIES) {
+        console.error(
+          `🛑 [${ownerUserId}] Reached max retries, giving up for now`
+        );
+        return null;
+      }
+
+      console.log(
+        `⏳ [${ownerUserId}] Retrying in ${Math.round(
+          RETRY_DELAY_MS / 1000
+        )}s...`
+      );
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Ambil semua user yang userbotEnabled=true dan punya session
+ */
+async function getEnabledUsersWithSession() {
+  const users = await prisma.user.findMany({
+    where: {
+      userbotEnabled: true,
+    },
+    select: {
+      telegramUserId: true,
+      session: true,
+    },
+  });
+
+  const usersWithSession = users.filter(
+    (u: { telegramUserId: bigint; session: string | null }) =>
+      u.session !== null
+  );
+
+  return usersWithSession;
+}
+
+/**
+ * Load & start semua userbot yang enabled
  */
 async function loadAndStartUserbots() {
-  try {
-    console.log("📋 Loading enabled userbots from database...");
+  console.log("📋 Loading enabled userbots from database...");
 
-    const users = await prisma.user.findMany({
-      where: {
-        userbotEnabled: true,
-      },
-      select: {
-        telegramUserId: true,
-        session: true,
-      },
-    });
+  const usersWithSession = await getEnabledUsersWithSession();
 
-    // Filter out users without session
-    const usersWithSession = users.filter(
-      (u: { telegramUserId: bigint; session: string | null }) =>
-        u.session !== null
-    );
+  console.log(
+    `📊 Found ${usersWithSession.length} enabled user(s) with session`
+  );
 
+  if (usersWithSession.length === 0) {
     console.log(
-      `📊 Found ${usersWithSession.length} enabled user(s) with session`
+      "⚠️  No enabled userbots found. Waiting for users to enable userbot..."
     );
+    return;
+  }
 
-    if (usersWithSession.length === 0) {
-      console.log(
-        "⚠️  No enabled userbots found. Waiting for users to enable userbot..."
-      );
-      return;
+  for (const user of usersWithSession) {
+    const ownerUserId = String(user.telegramUserId);
+    const sessionString = user.session as string;
+
+    if (!sessionString) {
+      console.warn(`⚠️  [${ownerUserId}] No session, skipping...`);
+      continue;
     }
 
-    // Start userbot for each enabled user
-    for (const user of usersWithSession) {
-      const ownerUserId = String(user.telegramUserId);
-      const sessionString = user.session as string;
-
-      if (!sessionString) {
-        console.warn(`⚠️  User ${ownerUserId} has no session, skipping...`);
-        continue;
-      }
-
-      // Skip if already running
-      if (runningUserbots.has(ownerUserId)) {
-        console.log(`⏭️  Userbot already running for user: ${ownerUserId}`);
-        continue;
-      }
-
-      try {
-        await startUserbotForUser(sessionString, ownerUserId);
-      } catch (error) {
-        console.error(
-          `❌ Failed to start userbot for user ${ownerUserId}:`,
-          error
-        );
-        // Continue with other users
-      }
+    if (runningUserbots.has(ownerUserId)) {
+      console.log(`⏭️  [${ownerUserId}] Userbot already running, skipping`);
+      continue;
     }
-  } catch (error) {
-    console.error("❌ Error loading userbots:", error);
-    throw error;
+
+    await startUserbotForUser(sessionString, ownerUserId);
   }
 }
 
@@ -115,6 +143,7 @@ async function loadAndStartUserbots() {
 async function shutdown() {
   console.log("\n🛑 Shutting down userbot worker...");
 
+  // Stop semua userbot
   for (const [userId, client] of runningUserbots.entries()) {
     try {
       if (client && client.connected) {
@@ -129,64 +158,79 @@ async function shutdown() {
     }
   }
 
-  await prisma.$disconnect();
+  runningUserbots.clear();
+
+  // Disconnect Prisma
+  try {
+    await prisma.$disconnect();
+  } catch (err) {
+    console.error("❌ Error disconnecting Prisma:", err);
+  }
+
   console.log("👋 Userbot worker stopped");
   process.exit(0);
 }
 
 /**
- * Watch for userbot status changes in database
- * Poll every 30 seconds to check for new enabled userbots
+ * Watch status userbot:
+ * - Start userbot baru kalau ada user enabled+punya session
+ * - Stop userbot yang di-disable
+ * - Restart userbot yang disconnect
  */
 async function watchUserbotStatus() {
+  const intervalMs = 30_000; // 30 detik
+
   setInterval(async () => {
     try {
-      const users = await prisma.user.findMany({
-        where: {
-          userbotEnabled: true,
-        },
-        select: {
-          telegramUserId: true,
-          session: true,
-        },
-      });
+      const usersWithSession = await getEnabledUsersWithSession();
 
-      // Filter out users without session
-      const usersWithSession = users.filter(
-        (u: { telegramUserId: bigint; session: string | null }) =>
-          u.session !== null
+      const enabledIds = new Set(
+        usersWithSession.map((u) => String(u.telegramUserId))
       );
 
-      // Start userbots that are not running yet
+      // 1) Start userbot untuk user enabled yang belum jalan
       for (const user of usersWithSession) {
         const ownerUserId = String(user.telegramUserId);
         const sessionString = user.session as string;
 
-        if (!sessionString) continue;
-        if (runningUserbots.has(ownerUserId)) continue;
+        const existingClient = runningUserbots.get(ownerUserId);
 
-        try {
+        // Kalau belum ada client → start
+        if (!existingClient) {
           await startUserbotForUser(sessionString, ownerUserId);
-        } catch (error) {
-          console.error(
-            `❌ Failed to start userbot for user ${ownerUserId}:`,
-            error
+          continue;
+        }
+
+        // Kalau ada client tapi kelihatan tidak connected → restart
+        if (!existingClient.connected) {
+          console.warn(
+            `⚠️ [${ownerUserId}] Client not connected, restarting userbot...`
           );
+
+          try {
+            await existingClient.disconnect().catch(() => undefined);
+          } catch {
+            // ignore error disconnect
+          }
+
+          runningUserbots.delete(ownerUserId);
+          await startUserbotForUser(sessionString, ownerUserId);
         }
       }
 
-      // Stop userbots that are disabled
-      for (const [userId] of runningUserbots.entries()) {
-        const user = await prisma.user.findUnique({
-          where: { telegramUserId: BigInt(userId) },
-          select: { userbotEnabled: true },
-        });
-
-        if (!user || !user.userbotEnabled) {
+      // 2) Stop userbot yang sekarang sudah tidak enabled
+      for (const [userId, client] of runningUserbots.entries()) {
+        if (!enabledIds.has(userId)) {
           console.log(`🛑 Stopping disabled userbot for user: ${userId}`);
-          const client = runningUserbots.get(userId);
-          if (client && client.connected) {
-            await client.disconnect();
+          try {
+            if (client && client.connected) {
+              await client.disconnect();
+            }
+          } catch (err) {
+            console.error(
+              `❌ Error disconnecting disabled userbot for user ${userId}:`,
+              err
+            );
           }
           runningUserbots.delete(userId);
         }
@@ -194,18 +238,16 @@ async function watchUserbotStatus() {
     } catch (error) {
       console.error("❌ Error watching userbot status:", error);
     }
-  }, 30000); // Check every 30 seconds
+  }, intervalMs);
 }
 
 /**
- * Start HTTP server for health check (required by Render Web Service)
- * Render Web Service memerlukan port yang terbuka untuk mendeteksi service sebagai "Live"
+ * HTTP server untuk health check (WAJIB di Render Web Service)
  */
 function startHealthCheckServer() {
-  const port = process.env.PORT || 3001;
+  const port = Number(process.env.PORT || 3001);
 
   const server = http.createServer((req, res) => {
-    // Health check endpoint
     if (req.url === "/health" || req.url === "/") {
       const status = {
         status: "ok",
@@ -222,7 +264,7 @@ function startHealthCheckServer() {
     }
   });
 
-  server.listen(Number(port), "0.0.0.0", () => {
+  server.listen(port, "0.0.0.0", () => {
     console.log(`🌐 Health check server listening on port ${port}`);
     console.log(`   Health endpoint: http://0.0.0.0:${port}/health`);
   });
@@ -237,7 +279,7 @@ async function main() {
   console.log("🤖 Starting Userbot Worker...");
   console.log("=".repeat(50));
 
-  // Load environment variables
+  // Validasi env
   if (!process.env.DATABASE_URL) {
     console.error("❌ DATABASE_URL is required");
     process.exit(1);
@@ -248,27 +290,28 @@ async function main() {
     process.exit(1);
   }
 
-  // Start health check HTTP server (REQUIRED by Render Web Service)
-  // Tanpa ini, Render tidak bisa mendeteksi port dan status akan tetap "In Progress"
   const healthServer = startHealthCheckServer();
 
-  // Handle graceful shutdown
-  process.on("SIGINT", async () => {
-    console.log("\n🛑 Received SIGINT, shutting down...");
+  // Graceful shutdown handler
+  const handleExit = async (signal: string) => {
+    console.log(`\n🛑 Received ${signal}, shutting down...`);
     healthServer.close();
     await shutdown();
-  });
-  process.on("SIGTERM", async () => {
-    console.log("\n🛑 Received SIGTERM, shutting down...");
-    healthServer.close();
-    await shutdown();
+  };
+
+  process.on("SIGINT", () => {
+    void handleExit("SIGINT");
   });
 
-  // Handle uncaught errors
+  process.on("SIGTERM", () => {
+    void handleExit("SIGTERM");
+  });
+
+  // Error handling global
   process.on("uncaughtException", (error) => {
     console.error("❌ Uncaught exception:", error);
-    healthServer.close();
-    shutdown();
+    // Jangan langsung exit brutal, coba shutdown rapi
+    void shutdown();
   });
 
   process.on("unhandledRejection", (reason, promise) => {
@@ -276,16 +319,15 @@ async function main() {
   });
 
   try {
-    // Load and start all enabled userbots
+    // Start semua userbot yang enabled
     await loadAndStartUserbots();
 
-    // Start watching for status changes
-    watchUserbotStatus();
+    // Watch perubahan status di DB
+    await watchUserbotStatus();
 
     console.log("=".repeat(50));
     console.log("✅ Userbot Worker is running!");
-    console.log("📡 Monitoring for new enabled userbots...");
-    console.log("Press Ctrl+C to stop");
+    console.log("📡 Monitoring for new enabled/disabled userbots...");
   } catch (error) {
     console.error("❌ Failed to start userbot worker:", error);
     healthServer.close();
@@ -293,7 +335,7 @@ async function main() {
   }
 }
 
-// Run main function
+// Run main
 main().catch((error) => {
   console.error("❌ Fatal error:", error);
   process.exit(1);
