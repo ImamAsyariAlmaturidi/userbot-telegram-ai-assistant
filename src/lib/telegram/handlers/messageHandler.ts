@@ -163,6 +163,54 @@ export function createMessageHandler(
     const senderFirstName = senderEntity?.firstName || senderEntity?.first_name;
     const senderLastName = senderEntity?.lastName || senderEntity?.last_name;
 
+    // Log sender payload for debugging
+    console.log(
+      `📩 New private message from ${message.senderId} (${
+        senderFirstName || ""
+      } ${senderLastName || ""}${
+        senderUsername ? ` @${senderUsername}` : ""
+      }): ${text?.substring(0, 100)}${text && text.length > 100 ? "..." : ""}`
+    );
+    console.log(
+      `[MessageHandler] Sender payload:`,
+      JSON.stringify(
+        {
+          senderId: String(message.senderId || ""),
+          username: senderUsername || null,
+          firstName: senderFirstName || null,
+          lastName: senderLastName || null,
+          chatId: String(chatId),
+          messageLength: text?.length || 0,
+        },
+        null,
+        2
+      )
+    );
+
+    // Log full senderEntity for detailed debugging (if available)
+    if (senderEntity) {
+      console.log(
+        `[MessageHandler] Full senderEntity:`,
+        JSON.stringify(
+          {
+            id: senderEntity?.id ? String(senderEntity.id) : null,
+            _: senderEntity?._ || null,
+            username: senderEntity?.username || null,
+            usernames: senderEntity?.usernames || null,
+            firstName:
+              senderEntity?.firstName || senderEntity?.first_name || null,
+            lastName: senderEntity?.lastName || senderEntity?.last_name || null,
+            phone: senderEntity?.phone || null,
+            bot: senderEntity?.bot || null,
+            verified: senderEntity?.verified || null,
+            premium: senderEntity?.premium || null,
+          },
+          null,
+          2
+        )
+      );
+    }
+
     const context: MessageContext = {
       chatId: String(chatId),
       senderId: String(message.senderId || ""),

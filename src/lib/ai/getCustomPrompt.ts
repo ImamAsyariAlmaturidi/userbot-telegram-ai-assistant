@@ -18,33 +18,16 @@ export async function getCustomPrompt(
       userId = BigInt(telegramUserId);
     }
 
-    console.log(
-      `[getCustomPrompt] Fetching prompt for telegram_user_id: ${userId}`
-    );
-
     const user = await prisma.user.findUnique({
       where: { telegramUserId: userId },
       select: { customPrompt: true },
     });
 
-    if (!user) {
-      console.log(
-        `[getCustomPrompt] User not found for ${userId}, using default prompt`
-      );
+    if (!user || !user.customPrompt) {
       return null;
     }
 
-    if (user.customPrompt) {
-      console.log(
-        `[getCustomPrompt] Found custom prompt for user ${userId} (length: ${user.customPrompt.length})`
-      );
-      return user.customPrompt;
-    }
-
-    console.log(
-      `[getCustomPrompt] No custom prompt set for user ${userId}, using default`
-    );
-    return null;
+    return user.customPrompt;
   } catch (error) {
     console.error("[getCustomPrompt] Error in getCustomPrompt:", error);
     return null;
