@@ -7,7 +7,9 @@
     "dev:https": "next dev --experimental-https",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "bot": "bun run bot/run.ts",
+    "bot:dev": "bun --watch bot/run.ts"
   },
   "dependencies": {
     "@langchain/anthropic": "^0.2.18",

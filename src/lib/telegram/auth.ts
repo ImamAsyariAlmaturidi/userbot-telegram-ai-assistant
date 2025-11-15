@@ -4,9 +4,7 @@ import { TelegramClient, Api } from "telegram";
 import { cookies } from "next/headers";
 import { createClientFromEnv } from "./client";
 import startBot from "@/app/services/handler/userbotAgent";
-import { PrismaClient } from "@/generated/prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 /**
  * Check if user is authorized
@@ -62,37 +60,13 @@ export async function checkAuthStatus(): Promise<{
         console.error("Error updating session in database:", err);
       }
 
-      // Auto-start userbot jika belum running dan enabled
-      try {
-        const me = await client.getMe();
-        const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
-
-        if (telegramUserId) {
-          // Check if userbot is enabled
-          const user = await prisma.user.findUnique({
-            where: { telegramUserId: telegramUserId },
-            select: { userbotEnabled: true },
-          });
-
-          if (user && user.userbotEnabled) {
-            const { startUserbot } = await import("./userbot");
-            const { userbotStore } = await import("./userbotStore");
-
-            const sessionStr = sessionString as unknown as string;
-            if (
-              !userbotStore.has(sessionStr) ||
-              !userbotStore.isConnected(sessionStr)
-            ) {
-              await startUserbot({ sessionString: sessionStr });
-              console.log("🤖 Userbot auto-started on status check");
-            }
-          } else {
-            console.log("🤖 Userbot is disabled, not starting");
-          }
-        }
-      } catch (err) {
-        console.error("⚠️ Failed to auto-start userbot:", err);
-      }
+      // NOTE: Userbot sekarang dijalankan sebagai proses terpisah via `bun run bot`
+      // Jangan auto-start userbot dari Next.js untuk menghindari:
+      // - Hot reload restarting userbot
+      // - Connection drops saat server restart
+      // - ECONNRESET errors
+      //
+      // Untuk start userbot, jalankan: `bun run bot` atau `bun run bot:dev`
 
       return {
         isAuthorized: true,

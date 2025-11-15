@@ -1,9 +1,7 @@
 "use server";
 import { NextResponse } from "next/server";
 import { startClient } from "@/lib/telegram/auth";
-import { PrismaClient } from "@/generated/prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {

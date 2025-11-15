@@ -6,7 +6,7 @@ const ragTool = tool({
   name: "get_knowledge_base",
 
   description:
-    "Mencari informasi di knowledge base internal. Gunakan tool ini PERTAMA sebelum mencari di internet. Berguna untuk informasi produk, FAQ, dokumentasi, atau pengetahuan spesifik yang sudah tersimpan.",
+    "Mencari informasi spesifik di knowledge base internal (produk, layanan, FAQ, dokumentasi). JANGAN gunakan untuk greeting/small talk seperti 'hi', 'halo', 'apa kabar'. Hanya gunakan untuk pertanyaan yang memerlukan informasi spesifik dari knowledge base. Gunakan HANYA SEKALI per pesan dengan query yang mencakup inti pertanyaan.",
   parameters: z.object({
     query: z.string().describe("Pertanyaan atau kata kunci untuk dicari"),
   }),
@@ -60,6 +60,7 @@ const ragTool = tool({
 
 const agentRag = new Agent({
   name: "rag",
+  model: "gpt-4o-mini",
   instructions:
     "Kamu adalah asisten yang membantu mencari dan memberikan informasi dari knowledge base. Berikan informasi yang relevan dan akurat berdasarkan hasil pencarian.",
   tools: [ragTool],

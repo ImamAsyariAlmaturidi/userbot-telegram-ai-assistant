@@ -1,7 +1,5 @@
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { generateEmbedding, embeddingToVectorString } from "../embeddings";
-
-const prisma = new PrismaClient();
 
 export interface SearchResult {
   id: string;

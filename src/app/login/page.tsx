@@ -26,7 +26,12 @@ export default function LoginPage() {
   useEffect(() => {
     (async () => {
       try {
-        await getAuthStatus();
+        const status = await getAuthStatus();
+        if (status?.isAuthorized) {
+          // Already logged in, redirect to dashboard
+          router.push("/dashboard");
+          return;
+        }
       } catch (err) {
         console.error("[LoginPage] Auth check failed:", err);
       } finally {

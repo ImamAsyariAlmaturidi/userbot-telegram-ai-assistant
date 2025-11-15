@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
-
-const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
   try {

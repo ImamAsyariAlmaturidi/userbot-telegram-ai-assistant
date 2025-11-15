@@ -241,8 +241,7 @@ export function createMessageHandler(
     // Check if userbot is enabled for the owner
     if (ownerUserId) {
       try {
-        const { PrismaClient } = await import("@/generated/prisma/client");
-        const prisma = new PrismaClient();
+        const { prisma } = await import("@/lib/prisma");
 
         const ownerId = BigInt(parseInt(ownerUserId, 10));
         const user = await prisma.user.findUnique({
@@ -254,11 +253,8 @@ export function createMessageHandler(
           console.log(
             `🚫 Userbot is disabled for owner ${ownerUserId}, ignoring message`
           );
-          await prisma.$disconnect();
           return;
         }
-
-        await prisma.$disconnect();
       } catch (err) {
         console.error("⚠️ Error checking userbot status:", err);
         // Continue processing if check fails
