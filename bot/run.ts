@@ -13,6 +13,7 @@
 import { startUserbot } from "../src/lib/telegram/userbot";
 import { prisma } from "../src/lib/prisma";
 import { AIMessageHandler } from "../src/lib/telegram/handlers/aiMessageHandler";
+import http from "http";
 
 // Track running userbots
 const runningUserbots = new Map<string, any>();
@@ -197,6 +198,39 @@ async function watchUserbotStatus() {
 }
 
 /**
+ * Start HTTP server for health check (required by Render Web Service)
+ * Render Web Service memerlukan port yang terbuka untuk mendeteksi service sebagai "Live"
+ */
+function startHealthCheckServer() {
+  const port = process.env.PORT || 3001;
+
+  const server = http.createServer((req, res) => {
+    // Health check endpoint
+    if (req.url === "/health" || req.url === "/") {
+      const status = {
+        status: "ok",
+        service: "userbot-worker",
+        timestamp: new Date().toISOString(),
+        runningUserbots: runningUserbots.size,
+      };
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(status, null, 2));
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    }
+  });
+
+  server.listen(Number(port), "0.0.0.0", () => {
+    console.log(`🌐 Health check server listening on port ${port}`);
+    console.log(`   Health endpoint: http://0.0.0.0:${port}/health`);
+  });
+
+  return server;
+}
+
+/**
  * Main entry point
  */
 async function main() {
@@ -214,13 +248,26 @@ async function main() {
     process.exit(1);
   }
 
+  // Start health check HTTP server (REQUIRED by Render Web Service)
+  // Tanpa ini, Render tidak bisa mendeteksi port dan status akan tetap "In Progress"
+  const healthServer = startHealthCheckServer();
+
   // Handle graceful shutdown
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", async () => {
+    console.log("\n🛑 Received SIGINT, shutting down...");
+    healthServer.close();
+    await shutdown();
+  });
+  process.on("SIGTERM", async () => {
+    console.log("\n🛑 Received SIGTERM, shutting down...");
+    healthServer.close();
+    await shutdown();
+  });
 
   // Handle uncaught errors
   process.on("uncaughtException", (error) => {
     console.error("❌ Uncaught exception:", error);
+    healthServer.close();
     shutdown();
   });
 
@@ -241,6 +288,7 @@ async function main() {
     console.log("Press Ctrl+C to stop");
   } catch (error) {
     console.error("❌ Failed to start userbot worker:", error);
+    healthServer.close();
     process.exit(1);
   }
 }
