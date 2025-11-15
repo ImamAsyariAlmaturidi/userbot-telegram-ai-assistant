@@ -19,20 +19,31 @@ export class AIMessageHandler implements MessageHandler {
   async handle(context: MessageContext): Promise<AgentResponse | null> {
     try {
       // Get custom prompt for the owner (logged in user), not the sender
+      // IMPORTANT: Selalu ambil dari database setiap kali handle message
+      // Ini memastikan prompt/knowledge source terbaru selalu digunakan
       const userIdToUse = this.ownerUserId || context.senderId;
       console.log(
         `[AIMessageHandler] Handling message from senderId: ${
           context.senderId
         }, using owner prompt: ${this.ownerUserId || "not set"}`
       );
+
       const customPrompt = await getCustomPrompt(userIdToUse);
 
       if (customPrompt) {
         console.log(
-          `[AIMessageHandler] Using custom prompt (length: ${customPrompt.length})`
+          `[AIMessageHandler] ✅ Using custom prompt (length: ${customPrompt.length})`
+        );
+        console.log(
+          `[AIMessageHandler] Custom prompt preview: ${customPrompt.substring(
+            0,
+            100
+          )}...`
         );
       } else {
-        console.log(`[AIMessageHandler] Using default prompt`);
+        console.log(
+          `[AIMessageHandler] ℹ️ Using default prompt (no custom prompt found)`
+        );
       }
 
       // Build context message with ALL user info

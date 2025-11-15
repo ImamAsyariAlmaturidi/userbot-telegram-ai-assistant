@@ -31,6 +31,7 @@ function sleep(ms: number) {
 
 /**
  * Start userbot untuk 1 user dengan retry sederhana
+ * Juga setup error handler untuk auto-restart jika disconnect
  */
 async function startUserbotForUser(
   sessionString: string,
@@ -48,6 +49,22 @@ async function startUserbotForUser(
         sessionString,
         handler: new AIMessageHandler(ownerUserId),
       });
+
+      // Monitor connection status setiap 10 detik
+      // Jika disconnect, akan di-restart oleh watch function
+      const checkConnection = setInterval(() => {
+        if (!client.connected) {
+          console.warn(
+            `⚠️ [${ownerUserId}] Client disconnected, will restart on next watch cycle`
+          );
+          clearInterval(checkConnection);
+          // Remove dari running list agar watch function restart
+          runningUserbots.delete(ownerUserId);
+        }
+      }, 10000); // Check setiap 10 detik
+
+      // Store interval untuk cleanup
+      (client as any)._connectionCheckInterval = checkConnection;
 
       runningUserbots.set(ownerUserId, client);
       console.log(`✅ [${ownerUserId}] Userbot started successfully`);
@@ -146,6 +163,11 @@ async function shutdown() {
   // Stop semua userbot
   for (const [userId, client] of runningUserbots.entries()) {
     try {
+      // Clear connection check interval jika ada
+      if ((client as any)?._connectionCheckInterval) {
+        clearInterval((client as any)._connectionCheckInterval);
+      }
+
       if (client && client.connected) {
         await client.disconnect();
         console.log(`✅ Disconnected userbot for user: ${userId}`);
@@ -208,6 +230,10 @@ async function watchUserbotStatus() {
           );
 
           try {
+            // Clear connection check interval jika ada
+            if ((existingClient as any)?._connectionCheckInterval) {
+              clearInterval((existingClient as any)._connectionCheckInterval);
+            }
             await existingClient.disconnect().catch(() => undefined);
           } catch {
             // ignore error disconnect
@@ -215,6 +241,29 @@ async function watchUserbotStatus() {
 
           runningUserbots.delete(ownerUserId);
           await startUserbotForUser(sessionString, ownerUserId);
+        } else {
+          // Client masih connected, tapi cek apakah masih bisa receive message
+          // Test dengan cek apakah event handler masih aktif
+          // Jika tidak, restart
+          try {
+            // Cek apakah client masih valid dengan test connection
+            await existingClient.getMe();
+          } catch (err) {
+            console.warn(
+              `⚠️ [${ownerUserId}] Client connection test failed, restarting...`,
+              err
+            );
+            try {
+              if ((existingClient as any)?._connectionCheckInterval) {
+                clearInterval((existingClient as any)._connectionCheckInterval);
+              }
+              await existingClient.disconnect().catch(() => undefined);
+            } catch {
+              // ignore
+            }
+            runningUserbots.delete(ownerUserId);
+            await startUserbotForUser(sessionString, ownerUserId);
+          }
         }
       }
 

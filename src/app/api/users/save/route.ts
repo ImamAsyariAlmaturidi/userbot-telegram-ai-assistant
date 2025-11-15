@@ -78,7 +78,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, data: result });
+    // Convert BigInt to string untuk JSON serialization
+    const responseData = {
+      success: true,
+      data: {
+        telegram_user_id: Number(result.telegramUserId),
+        custom_prompt: result.customPrompt,
+      },
+    };
+
+    return NextResponse.json(responseData);
   } catch (error: any) {
     console.error("Error saving user data:", error);
     return NextResponse.json(
