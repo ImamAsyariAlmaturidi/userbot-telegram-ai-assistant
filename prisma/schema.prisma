@@ -1,15 +1,58 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
+
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [uuid_ossp(map: "uuid-ossp", schema: "extensions"), vector]
+}
+
+model User {
+  id             String        @id @default(uuid())
+  telegramUserId BigInt        @unique @map("telegram_user_id")
+  phoneNumber    String        @map("phone_number")
+  session        String
+  initDataRaw    String?       @map("init_data_raw")
+  initDataUser   Json?         @map("init_data_user")
+  initDataChat   Json?         @map("init_data_chat")
+  customPrompt   String?       @map("custom_prompt")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  userbotEnabled Boolean       @default(true) @map("userbot_enabled")
+  aiConfigures   AIConfigure[]
+
+  @@index([telegramUserId])
+  @@map("users")
+}
+
+model AIConfigure {
+  id                String           @id @default(uuid())
+  userId            String           @map("user_id")
+  tool              String?
+  prompt            String?
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  knowledgeSourceId String?          @map("knowledge_source_id")
+  knowledgeSource   KnowledgeSource? @relation(fields: [knowledgeSourceId], references: [id])
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([knowledgeSourceId])
+  @@map("ai_configure")
+}
+
+model KnowledgeSource {
+  id           String                 @id @default(uuid())
+  content      String
+  embeddings   Unsupported("vector")?
+  metadata     Json?
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @default(now()) @updatedAt @map("updated_at")
+  aiConfigures AIConfigure[]
+
+  @@map("knowledge_source")
 }
