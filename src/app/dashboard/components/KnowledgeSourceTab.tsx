@@ -1,13 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  Button,
-  Spinner,
-  Section,
-  Cell,
-  List,
-} from "@telegram-apps/telegram-ui";
+import { motion } from "framer-motion";
+import { Spinner } from "@/components/ui/Spinner";
 
 interface KnowledgeSource {
   id: string;
@@ -151,22 +146,36 @@ export function KnowledgeSourceTab({
   }
 
   return (
-    <div className="space-y-6">
-      <Section header="Tambah Knowledge Source">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Tambahkan knowledge source untuk meningkatkan kemampuan AI dalam
-            merespons. Embeddings akan dibuat otomatis menggunakan OpenAI.
-          </p>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <h3 className="text-sm font-semibold mb-3 text-white">
+          Tambah Knowledge Source
+        </h3>
+        <div className="space-y-3">
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Masukkan konten knowledge source... (embeddings akan dibuat otomatis)"
             disabled={isAdding}
-            rows={8}
-            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-y disabled:opacity-50 disabled:cursor-not-allowed"
+            rows={4}
+            style={{ backgroundColor: "#fff", color: "#000", fontSize: "12px" }}
+            className="w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all !bg-white !text-black resize-y disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <Button onClick={handleAdd} disabled={isAdding || !content.trim()}>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            onClick={handleAdd}
+            disabled={isAdding || !content.trim()}
+          >
             {isAdding ? (
               <>
                 <Spinner size="s" /> Membuat embeddings...
@@ -174,61 +183,84 @@ export function KnowledgeSourceTab({
             ) : (
               "Tambah Knowledge Source"
             )}
-          </Button>
+          </motion.button>
           {isAdding && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-xs text-gray-400 leading-tight"
+            >
               Sedang membuat embeddings menggunakan OpenAI...
-            </p>
+            </motion.p>
           )}
         </div>
-      </Section>
+      </motion.div>
 
-      <Section header={`Knowledge Sources (${knowledgeSources.length})`}>
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3, delay: 0.1 }}
+      >
+        <h3 className="text-sm font-semibold mb-3 text-white">
+          Knowledge Sources ({knowledgeSources.length})
+        </h3>
         {knowledgeSources.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <p>Belum ada knowledge source.</p>
-            <p className="text-sm mt-2">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-6 text-gray-400"
+          >
+            <p className="text-xs">Belum ada knowledge source.</p>
+            <p className="text-xs mt-1">
               Tambahkan knowledge source untuk meningkatkan kemampuan AI.
             </p>
-          </div>
+          </motion.div>
         ) : (
-          <List>
-            {knowledgeSources.map((ks) => (
-              <Cell
+          <div className="space-y-2">
+            {knowledgeSources.map((ks, index) => (
+              <motion.div
                 key={ks.id}
-                description={
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                      {ks.content.substring(0, 100)}
-                      {ks.content.length > 100 ? "..." : ""}
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-600 mt-1">
-                      Dibuat:{" "}
-                      {new Date(ks.createdAt).toLocaleDateString("id-ID", {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </p>
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.05 }}
+                whileHover={{ scale: 1.01, x: 4 }}
+                className="p-3 rounded-lg bg-[rgba(29,29,29,.85)] backdrop-blur-[10px]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-white mb-1">
+                      Knowledge Source #{ks.id.substring(0, 8)}
+                    </h4>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-300 line-clamp-2">
+                        {ks.content.substring(0, 100)}
+                        {ks.content.length > 100 ? "..." : ""}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Dibuat:{" "}
+                        {new Date(ks.createdAt).toLocaleDateString("id-ID", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </div>
                   </div>
-                }
-                after={
-                  <Button
-                    mode="plain"
+                  <motion.button
                     onClick={() => handleDelete(ks.id)}
                     disabled={loading}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="px-2 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Hapus
-                  </Button>
-                }
-                multiline
-              >
-                Knowledge Source #{ks.id.substring(0, 8)}
-              </Cell>
+                  </motion.button>
+                </div>
+              </motion.div>
             ))}
-          </List>
+          </div>
         )}
-      </Section>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

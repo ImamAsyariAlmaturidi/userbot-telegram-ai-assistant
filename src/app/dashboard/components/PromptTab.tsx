@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button, Spinner, Section } from "@telegram-apps/telegram-ui";
+import { motion } from "framer-motion";
+import { Spinner } from "@/components/ui/Spinner";
 
 const DEFAULT_PROMPT =
   "Kamu adalah Assistant dari STAR, kamu membantu kebutuhan seseorang yang chat kamu melalui platform telegram, jika pertanyaan general gunakan web search tool";
@@ -95,64 +96,96 @@ export function PromptTab({
   }
 
   return (
-    <div className="space-y-6">
-      <Section header="Customize AI Prompt">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Atur prompt untuk AI assistant. Prompt ini akan digunakan untuk
-            merespons pesan di Telegram.
-          </p>
-          <textarea
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder={DEFAULT_PROMPT}
-            disabled={loading}
-            rows={10}
-            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-y disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {customPrompt.length} karakter
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="mb-4">
+          <h3 className="text-sm font-bold mb-1 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Customize AI Prompt
+          </h3>
+          <p className="text-xs text-gray-300">
+            Atur prompt untuk AI assistant sesuai kebutuhan Anda
           </p>
         </div>
-      </Section>
-
-      <div className="flex flex-col gap-3">
-        <Button onClick={handleSave} disabled={loading}>
-          {loading ? <Spinner size="s" /> : "Simpan Prompt"}
-        </Button>
-        <Button onClick={handleReset} disabled={loading} mode="outline">
-          Reset ke Default
-        </Button>
-      </div>
-
-      <Section>
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-          <div className="flex items-start space-x-3">
-            <svg
-              className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                Tips
-              </p>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                Buat prompt yang jelas dan spesifik. Prompt yang baik akan
-                membantu AI memberikan respons yang lebih akurat dan relevan.
-              </p>
+        <div className="space-y-3">
+          <div className="relative">
+            <label className="block text-xs font-medium text-gray-300 mb-2">
+              Prompt Text
+            </label>
+            <textarea
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              disabled={loading}
+              rows={5}
+              style={{
+                backgroundColor: "#fff",
+                color: "#000",
+                fontSize: "12px",
+              }}
+              className="w-full px-4 py-3 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all !bg-white !text-black resize-y disabled:opacity-50 disabled:cursor-not-allowed font-normal leading-normal shadow-inner"
+            />
+            <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+              {customPrompt.length} karakter
             </div>
           </div>
         </div>
-      </Section>
-    </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.2 }}
+        className="flex flex-col gap-2"
+      >
+        <motion.button
+          onClick={handleSave}
+          disabled={loading}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl disabled:hover:scale-100"
+        >
+          {loading ? (
+            <>
+              <Spinner size="s" />
+              <span>Menyimpan...</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+              <span>Simpan Prompt</span>
+            </>
+          )}
+        </motion.button>
+        <motion.button
+          onClick={handleReset}
+          disabled={loading}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full py-2.5 px-4 bg-black/20 backdrop-blur-sm hover:bg-black/30 disabled:opacity-50 disabled:cursor-not-allowed text-gray-200 text-sm font-medium rounded-lg transition-all duration-200 disabled:hover:scale-100 shadow-md"
+        >
+          Reset ke Default
+        </motion.button>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -1,15 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { Page } from "@/components/Page";
-import {
-  Button,
-  Spinner,
-  Snackbar,
-  Cell,
-  Switch,
-  Section,
-} from "@telegram-apps/telegram-ui";
+import { Spinner } from "@/components/ui/Spinner";
+import { Snackbar } from "@/components/ui/Snackbar";
+import { Switch } from "@/components/ui/Switch";
 import { initDataState } from "@telegram-apps/sdk-react";
 import { useSignal } from "@telegram-apps/sdk-react";
 import { useRouter } from "next/navigation";
@@ -21,7 +17,7 @@ import { BottomNavigation } from "@/components/BottomNavigation/BottomNavigation
 export default function DashboardPage() {
   const router = useRouter();
   const initData = useSignal(initDataState);
-  const [activeTab, setActiveTab] = useState("prompt");
+  const [activeTab, setActiveTab] = useState("home");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [userbotEnabled, setUserbotEnabled] = useState(false);
   const [loadingUserbotStatus, setLoadingUserbotStatus] = useState(true);
@@ -352,79 +348,97 @@ export default function DashboardPage() {
 
   return (
     <Page>
-      {snack.open && (
-        <Snackbar
-          onClose={() => setSnack({ open: false, text: "", tone: "default" })}
-        >
-          {snack.text}
-        </Snackbar>
-      )}
+      <Snackbar
+        open={snack.open}
+        onClose={() => setSnack({ open: false, text: "", tone: "default" })}
+        tone={snack.tone}
+      >
+        {snack.text}
+      </Snackbar>
 
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 pb-24">
-        {/* Header */}
-        <div className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-          <div className="max-w-4xl mx-auto px-4 py-6">
-            <div className="flex items-center space-x-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-lg">
-                    {userName.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Selamat Datang, {userName}!
-                </h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Kelola AI assistant Anda
-                </p>
-              </div>
+      <div className="min-h-screen bg-[#070615] pb-24">
+        {/* Header Simple */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="px-4 py-3 pt-6"
+        >
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="pl-2 pt-6">
+              <h1 className="text-base font-semibold text-white flex items-center gap-2">
+                <span>Hello</span>
+                <span className="text-pink-500">|</span>
+                <span>{userName}</span>
+              </h1>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Main Content */}
-        <div className="max-w-4xl mx-auto px-4 pt-8 space-y-6">
+        <div className="max-w-4xl mx-auto px-4 pt-4 space-y-3">
           {/* AI Toggle Section */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
-            <Section header="Status AI Assistant">
-              <Cell
-                Component="label"
-                after={
-                  <Switch
-                    checked={userbotEnabled}
-                    disabled={togglingUserbot || loadingUserbotStatus}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      handleToggleUserbot(checked);
-                    }}
-                  />
-                }
-                description={
-                  userbotEnabled
-                    ? "AI Assistant aktif dan siap merespons pesan"
-                    : "AI Assistant tidak aktif"
-                }
-                multiline
-              >
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            whileHover={{ scale: 1.01 }}
+            className="bg-[rgba(29,29,29,.85)] backdrop-blur-[10px] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,.15)] p-4"
+          >
+            <h2 className="text-sm font-semibold mb-3 text-white">
+              Status AI Assistant
+            </h2>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex-1">
                 {loadingUserbotStatus ? (
                   <div className="flex items-center gap-2">
                     <Spinner size="s" />
-                    <span>Memuat status...</span>
+                    <span className="text-gray-300 text-sm">
+                      Memuat status...
+                    </span>
                   </div>
-                ) : userbotEnabled ? (
-                  "AI Assistant: Aktif"
                 ) : (
-                  "AI Assistant: Nonaktif"
+                  <>
+                    <div className="text-white text-sm font-medium">
+                      {userbotEnabled
+                        ? "AI Assistant: Aktif"
+                        : "AI Assistant: Nonaktif"}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {userbotEnabled
+                        ? "AI Assistant aktif dan siap merespons pesan"
+                        : "AI Assistant tidak aktif"}
+                    </div>
+                  </>
                 )}
-              </Cell>
-            </Section>
-          </div>
+              </div>
+              <Switch
+                checked={userbotEnabled}
+                disabled={togglingUserbot || loadingUserbotStatus}
+                onChange={(checked) => handleToggleUserbot(checked)}
+              />
+            </label>
+          </motion.div>
 
           {/* Tab Content */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            whileHover={{ scale: 1.01 }}
+            className="bg-[rgba(29,29,29,.85)] backdrop-blur-[10px] rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,.15)] p-4"
+          >
             {/* Tab Content */}
+            {activeTab === "home" && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-base font-bold text-white mb-3">Home</h2>
+                  <p className="text-sm text-gray-300">
+                    Welcome to your AI Assistant dashboard
+                  </p>
+                </div>
+              </div>
+            )}
             {activeTab === "prompt" && (
               <PromptTab
                 telegramUserId={telegramUserId}
@@ -447,24 +461,36 @@ export default function DashboardPage() {
                 }
               />
             )}
-            {activeTab === "profile" && (
-              <div className="space-y-6">
+            {activeTab === "settings" && (
+              <div className="space-y-4">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  <h2 className="text-base font-bold text-white mb-3">
+                    Settings
+                  </h2>
+                  <p className="text-sm text-gray-300">
+                    Settings page coming soon
+                  </p>
+                </div>
+              </div>
+            )}
+            {activeTab === "profile" && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-base font-bold text-white mb-3">
                     Profile
                   </h2>
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                        <span className="text-white font-bold text-2xl">
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+                        <span className="text-white font-bold text-lg">
                           {userName.charAt(0).toUpperCase()}
                         </span>
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <h3 className="text-sm font-semibold text-white">
                           {userName}
                         </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-xs text-gray-400">
                           Telegram ID: {telegramUserId}
                         </p>
                       </div>
@@ -473,7 +499,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
         </div>
       </div>
 

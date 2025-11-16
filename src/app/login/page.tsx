@@ -3,7 +3,8 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Page } from "@/components/Page";
-import { Button, Spinner, Snackbar } from "@telegram-apps/telegram-ui";
+import { Spinner } from "@/components/ui/Spinner";
+import { Snackbar } from "@/components/ui/Snackbar";
 import { useTranslations } from "next-intl";
 import { sendLoginCode, getAuthStatus } from "@/core/api/auth";
 import { initDataState, useSignal } from "@telegram-apps/sdk-react";
@@ -177,21 +178,27 @@ export default function LoginPage() {
 
   return (
     <Page>
-      {snack.open && (
-        <Snackbar
-          onClose={() => setSnack({ open: false, text: "", tone: "default" })}
-        >
-          {snack.text}
-        </Snackbar>
-      )}
+      <Snackbar
+        open={snack.open}
+        onClose={() => setSnack({ open: false, text: "", tone: "default" })}
+        tone={snack.tone}
+      >
+        {snack.text}
+      </Snackbar>
 
-      <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-[#070615]">
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-4 shadow-lg">
+            <div
+              className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 shadow-lg"
+              style={{
+                background: `linear-gradient(135deg, var(--blue-500) 0%, var(--blue-600) 100%)`,
+              }}
+            >
               <svg
-                className="w-10 h-10 text-white"
+                className="w-10 h-10"
+                style={{ color: "var(--foreground)" }}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -204,25 +211,35 @@ export default function LoginPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            <h1
+              className="text-3xl font-bold mb-2"
+              style={{ color: "var(--gray-900)" }}
+            >
               {t("sectionTitle") || "Masuk ke Akun"}
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p style={{ color: "var(--gray-600)" }}>
               Masukkan nomor telepon Anda untuk melanjutkan
             </p>
           </div>
 
           {/* Card */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 space-y-6">
+          <div
+            className="rounded-2xl shadow-xl p-6 space-y-6"
+            style={{ backgroundColor: "var(--foreground)" }}
+          >
             {/* Phone Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: "var(--gray-700)" }}
+              >
                 {t("phoneHeader") || "Nomor Telepon"}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg
-                    className="h-5 w-5 text-gray-400"
+                    className="h-5 w-5"
+                    style={{ color: "var(--gray-400)" }}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -243,11 +260,16 @@ export default function LoginPage() {
                   placeholder={t("phonePlaceholder") || "+6281234567890"}
                   inputMode="tel"
                   disabled={loading}
-                  className={`w-full pl-12 pr-10 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                    phoneHasError
-                      ? "border-red-500 bg-red-50 dark:bg-red-900/20"
-                      : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  className={`w-full pl-12 pr-10 py-3 border rounded-xl focus:outline-none focus:ring-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                  style={{
+                    borderColor: phoneHasError
+                      ? "var(--error)"
+                      : "var(--gray-300)",
+                    backgroundColor: phoneHasError
+                      ? "rgba(239, 68, 68, 0.1)"
+                      : "var(--gray-50)",
+                    color: "var(--gray-900)",
+                  }}
                 />
                 {phoneNumber && (
                   <button
@@ -256,7 +278,8 @@ export default function LoginPage() {
                       setPhoneNumber("");
                       setPhoneTouched(false);
                     }}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center transition-colors"
+                    style={{ color: "var(--gray-400)" }}
                     aria-label="Clear phone"
                   >
                     <svg
@@ -276,24 +299,27 @@ export default function LoginPage() {
                 )}
               </div>
               {phoneHasError && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                <p className="mt-2 text-sm" style={{ color: "var(--error)" }}>
                   {t("phoneError") || "Nomor telepon tidak valid"}
                 </p>
               )}
             </div>
 
             {/* Button */}
-            <Button
+            <button
               onClick={handleSendCode}
               disabled={loading || !isValidPhone(phoneNumber)}
-              className="w-full"
+              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               {loading ? <Spinner size="s" /> : t("sendCode") || "Kirim Kode"}
-            </Button>
+            </button>
           </div>
 
           {/* Footer */}
-          <p className="text-center mt-6 text-sm text-gray-500 dark:text-gray-400">
+          <p
+            className="text-center mt-6 text-sm"
+            style={{ color: "var(--gray-500)" }}
+          >
             Dengan melanjutkan, Anda menyetujui syarat dan ketentuan kami
           </p>
         </div>

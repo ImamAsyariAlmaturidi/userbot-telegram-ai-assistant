@@ -2,18 +2,24 @@
   position: fixed;
   bottom: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateZ(0);
   display: flex;
   justify-content: space-around;
   align-items: center;
-  background-color: rgba(31, 41, 55, 0.95);
+  width: 100%;
+  max-width: min(580px, 80%);
+  height: 72px;
+  background: rgba(29, 29, 29, 0.85);
   backdrop-filter: blur(10px);
-  padding: 8px 4px;
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 0 16px;
+  pointer-events: auto;
+  border: 1px solid hsla(0, 0%, 100%, 0.08);
+  isolation: isolate;
   z-index: 1000;
-  border-radius: 20px;
-  max-width: calc(100% - 16px);
-  width: calc(100% - 16px);
-  margin: 0 8px 8px 8px;
+  margin: 0 auto 8px auto;
 }
 
 .bottom-nav-item {
@@ -66,8 +72,8 @@
 /* Dark mode support */
 @media (prefers-color-scheme: light) {
   .bottom-navigation {
-    background-color: rgba(249, 250, 251, 0.95);
-    border-top: 1px solid rgba(229, 231, 235, 0.5);
+    background: rgba(29, 29, 29, 0.85);
+    border: 1px solid hsla(0, 0%, 100%, 0.08);
   }
 
   .bottom-nav-icon {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Page } from "@/components/Page";
-import { Spinner } from "@telegram-apps/telegram-ui";
+import { Spinner } from "@/components/ui/Spinner";
 import { getAuthStatus } from "@/core/api/auth";
 import { initDataState, useSignal } from "@telegram-apps/sdk-react";
 
@@ -95,14 +95,7 @@ export default function Home() {
 
   return (
     <Page back={false}>
-      <div
-        style={{
-          minHeight: "100dvh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      <div className="min-h-screen flex items-center justify-center bg-[#070615]">
         <Spinner size="m" />
       </div>
     </Page>

@@ -1,14 +1,8 @@
 "use client";
 
 import { type PropsWithChildren, useEffect } from "react";
-import {
-  initData,
-  miniApp,
-  useLaunchParams,
-  useSignal,
-} from "@telegram-apps/sdk-react";
+import { initData, miniApp, useSignal } from "@telegram-apps/sdk-react";
 import { TonConnectUIProvider } from "@tonconnect/ui-react";
-import { AppRoot } from "@telegram-apps/telegram-ui";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorPage } from "@/components/ErrorPage";
@@ -18,9 +12,6 @@ import { setLocale } from "@/core/i18n/locale";
 import "./styles.css";
 
 function RootInner({ children }: PropsWithChildren) {
-  // useLaunchParams should work if mockEnv() ran successfully
-  // If it throws, ErrorBoundary will catch it
-  const lp = useLaunchParams();
   const isDark = useSignal(miniApp.isDark);
   const initDataUser = useSignal(initData.user);
 
@@ -29,16 +20,20 @@ function RootInner({ children }: PropsWithChildren) {
     initDataUser && setLocale(initDataUser.language_code);
   }, [initDataUser]);
 
-  const platform =
-    lp?.tgWebAppPlatform && ["macos", "ios"].includes(lp.tgWebAppPlatform)
-      ? "ios"
-      : "base";
+  // Apply dark mode to body
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [isDark]);
 
   return (
     <TonConnectUIProvider manifestUrl="/tonconnect-manifest.json">
-      <AppRoot appearance={isDark ? "dark" : "light"} platform={platform}>
+      <div className="min-h-screen bg-[#070615] text-white font-sans">
         {children}
-      </AppRoot>
+      </div>
     </TonConnectUIProvider>
   );
 }

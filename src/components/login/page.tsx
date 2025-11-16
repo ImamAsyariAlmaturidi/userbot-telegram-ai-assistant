@@ -1,71 +1,28 @@
+// Refactored LoginPage with Tailwind (no inline styles)
+
 "use client";
 
 import React, { useState } from "react";
 import { Page } from "@/components/Page";
-import {
-  List,
-  Section,
-  Input,
-  PinInput,
-  Spinner,
-  Snackbar,
-  Cell,
-  Button,
-} from "@telegram-apps/telegram-ui";
-import { SectionFooter } from "@telegram-apps/telegram-ui/dist/components/Blocks/Section/components/SectionFooter/SectionFooter";
 import { useTranslations } from "next-intl";
-// import { PhoneInputWithTgui } from "@/components/PhoneInputWithTgui";
-// import { PhoneInputField } from "@/components/PhoneInputField";
 
 export default function LoginPage() {
   const t = useTranslations("login");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [phoneCode, setPhoneCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [statusLoading, setStatusLoading] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [sessionString, setSessionString] = useState<string | null>(null);
-  const [snack, setSnack] = useState<{
-    open: boolean;
-    text: string;
-    tone?: "default" | "positive" | "critical";
-  }>({ open: false, text: "", tone: "default" });
   const [phoneTouched, setPhoneTouched] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [snack, setSnack] = useState({
+    open: false,
+    text: "",
+    tone: "default" as "default" | "positive" | "critical",
+  });
 
   const isValidPhone = (value: string) => /^\+?\d{8,15}$/.test(value.trim());
   const phoneHasError = phoneTouched && !isValidPhone(phoneNumber);
 
-  //   async function clientStartHandler(): Promise<void> {
-  //     setLoading(true);
-  //     setError(null);
-  //     setSuccess(null);
-  //     setSessionString(null);
-  //     try {
-  //       const res = await fetch("/api/auth/start", {
-  //         method: "POST",
-  //         headers: { "Content-Type": "application/json" },
-  //         body: JSON.stringify({ phoneNumber, phoneCode, password }),
-  //       });
-  //       const data = await res.json();
-  //       if (!data?.ok) {
-  //         throw new Error(data?.error ?? "Unknown error");
-  //       }
-  //       setSessionString(data.sessionString);
-  //       setIsLoggedIn(true);
-  //       setSuccess("Login berhasil!");
-  //       setAuthInfo(initialState);
-  //     } catch (e: any) {
-  //       setError(e?.message ?? "Unknown error");
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   }
-
   async function handleSendCode() {
     if (!isValidPhone(phoneNumber)) {
       setPhoneTouched(true);
-      console.warn("[handleSendCode] invalid phoneNumber", { phoneNumber });
       setSnack({
         open: true,
         text: "Nomor telepon tidak valid",
@@ -73,7 +30,7 @@ export default function LoginPage() {
       });
       return;
     }
-    console.log("[handleSendCode] sending code for", { phoneNumber });
+
     setLoading(true);
     try {
       const res = await fetch("/api/auth/send-code", {
@@ -82,22 +39,19 @@ export default function LoginPage() {
         body: JSON.stringify({ phoneNumber }),
       });
       const data = await res.json();
-      if (!data?.ok) {
-        throw new Error(data?.error ?? "Unknown error");
-      }
 
-      console.log("[handleSendCode] success", data);
+      if (!data?.ok) throw new Error(data?.error ?? "Unknown error");
+
       setSnack({
         open: true,
         text: data?.message || "Kode terkirim",
         tone: "positive",
       });
     } catch (e: any) {
-      console.log("[handleSendCode] error", e);
-      alert(e?.message);
       const isNetworkError =
         e instanceof TypeError &&
         /fetch|network|Failed to fetch|Load failed/i.test(e?.message || "");
+
       setSnack({
         open: true,
         text: isNetworkError
@@ -106,77 +60,128 @@ export default function LoginPage() {
         tone: "critical",
       });
     } finally {
-      console.log("[handleSendCode] finished");
       setLoading(false);
     }
   }
 
   return (
     <Page>
+      {/* Snackbar */}
       {snack.open && (
-        <Snackbar
-          onClose={() => setSnack({ open: false, text: "", tone: "default" })}
-        >
-          {snack.text}
-        </Snackbar>
-      )}
-      <div
-        style={{
-          minHeight: "100dvh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 16,
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 420 }}>
-          <Section header={t("sectionTitle")}>
-            <List>
-              <Input
-                header={t("phoneHeader")}
-                placeholder={t("phonePlaceholder")}
-                value={phoneNumber}
-                onChange={(e) => {
-                  setPhoneNumber(e.target.value);
-                }}
-                onBlur={() => setPhoneTouched(true)}
-                status={phoneHasError ? "error" : "default"}
-                after={
-                  phoneNumber ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhoneNumber("");
-                        setPhoneTouched(false);
-                      }}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "var(--tgui--link_color, #3b82f6)",
-                        cursor: "pointer",
-                        padding: 0,
-                      }}
-                      aria-label="Clear phone"
-                    >
-                      {t("clear")}
-                    </button>
-                  ) : undefined
-                }
-                inputMode="tel"
-                disabled={loading}
-              />
-            </List>
-          </Section>
-          <SectionFooter centered>
-            <Button
-              onClick={handleSendCode}
-              disabled={loading || !isValidPhone(phoneNumber)}
+        <div className="fixed top-0 left-0 right-0 z-[9999] animate-[slideDown_0.3s_ease-out]">
+          <div
+            className={`flex items-center justify-between px-4 py-3 text-white
+              ${
+                snack.tone === "critical"
+                  ? "bg-red-500"
+                  : snack.tone === "positive"
+                  ? "bg-emerald-500"
+                  : "bg-blue-500"
+              }
+            `}
+          >
+            <span>{snack.text}</span>
+            <button
+              onClick={() =>
+                setSnack({ open: false, text: "", tone: "default" })
+              }
+              className="text-white text-lg px-2"
             >
-              {loading ? <Spinner size="s" /> : t("login")}
-            </Button>
-          </SectionFooter>
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-[#070615]">
+        <div className="w-full max-w-[420px]">
+          {/* Section */}
+          <div className="bg-[var(--tg-theme-bg-color,white)] rounded-xl p-4 mb-4">
+            <h2 className="mb-4 text-lg font-semibold">{t("sectionTitle")}</h2>
+
+            {/* Input */}
+            <div className="mb-3">
+              <label className="block text-sm font-medium mb-2 text-[var(--tg-theme-text-color,#111827)]">
+                {t("phoneHeader")}
+              </label>
+
+              <div className="relative">
+                <input
+                  type="tel"
+                  placeholder={t("phonePlaceholder")}
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  onBlur={() => setPhoneTouched(true)}
+                  disabled={loading}
+                  className={`w-full px-3 py-3 rounded-lg text-base outline-none transition border-2
+                    bg-[var(--tg-theme-secondary-bg-color,#f9fafb)] text-[var(--tg-theme-text-color,#111827)]
+                    ${
+                      phoneHasError
+                        ? "border-red-500"
+                        : "border-[var(--tg-theme-hint-color,#d1d5db)]"
+                    }
+                    focus:border-blue-500
+                  `}
+                />
+
+                {phoneNumber && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhoneNumber("");
+                      setPhoneTouched(false);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xl px-1"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {phoneHasError && (
+                <p className="mt-1 text-xs text-red-500">
+                  Nomor telepon tidak valid
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Button */}
+          <button
+            onClick={handleSendCode}
+            disabled={loading || !isValidPhone(phoneNumber)}
+            className={`w-full py-3 rounded-lg text-white text-base font-medium flex items-center justify-center gap-2 transition
+              ${
+                loading || !isValidPhone(phoneNumber)
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-[var(--tg-theme-button-color,#3b82f6)] cursor-pointer"
+              }
+            `}
+          >
+            {loading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              t("login")
+            )}
+          </button>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes slideDown {
+          from {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </Page>
   );
 }

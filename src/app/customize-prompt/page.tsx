@@ -2,15 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Page } from "@/components/Page";
-import {
-  List,
-  Section,
-  Button,
-  Spinner,
-  Snackbar,
-  Text,
-} from "@telegram-apps/telegram-ui";
-import { SectionFooter } from "@telegram-apps/telegram-ui/dist/components/Blocks/Section/components/SectionFooter/SectionFooter";
+import { Spinner } from "@/components/ui/Spinner";
+import { Snackbar } from "@/components/ui/Snackbar";
 import { initDataState, type User } from "@telegram-apps/sdk-react";
 import { useSignal } from "@telegram-apps/sdk-react";
 
@@ -139,14 +132,7 @@ export default function CustomizePromptPage() {
   if (fetching) {
     return (
       <Page>
-        <div
-          style={{
-            minHeight: "100dvh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
+        <div className="min-h-screen flex items-center justify-center bg-[#070615]">
           <Spinner size="m" />
         </div>
       </Page>
@@ -156,19 +142,11 @@ export default function CustomizePromptPage() {
   if (!telegramUserId) {
     return (
       <Page>
-        <div
-          style={{
-            minHeight: "100dvh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <Text>
+        <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-[#070615]">
+          <p className="text-white">
             Silakan buka aplikasi ini melalui Telegram untuk mengakses halaman
             ini.
-          </Text>
+          </p>
         </div>
       </Page>
     );
@@ -176,90 +154,76 @@ export default function CustomizePromptPage() {
 
   return (
     <Page>
-      {snack.open && (
-        <Snackbar
-          onClose={() => setSnack({ open: false, text: "", tone: "default" })}
-        >
-          {snack.text}
-        </Snackbar>
-      )}
-
-      <div
-        style={{
-          minHeight: "100dvh",
-          padding: 16,
-        }}
+      <Snackbar
+        open={snack.open}
+        onClose={() => setSnack({ open: false, text: "", tone: "default" })}
+        tone={snack.tone}
       >
-        <Section header="Customize AI Prompt">
-          <List>
-            <div style={{ padding: "8px 0" }}>
-              <Text
-                style={{
-                  fontSize: "14px",
-                  color: "var(--tgui--hint_color, #999)",
-                  marginBottom: "8px",
-                  display: "block",
-                }}
-              >
-                Atur prompt untuk AI assistant. Prompt ini akan digunakan untuk
-                merespons pesan di Telegram.
-              </Text>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder={DEFAULT_PROMPT}
-                style={{
-                  width: "100%",
-                  minHeight: "200px",
-                  padding: "12px",
-                  fontSize: "16px",
-                  fontFamily: "inherit",
-                  border: "1px solid var(--tgui--separator_color, #e0e0e0)",
-                  borderRadius: "12px",
-                  backgroundColor: "var(--tgui--secondary_bg_color, #fff)",
-                  color: "var(--tgui--text_color, #000)",
-                  resize: "vertical",
-                  outline: "none",
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor =
-                    "var(--tgui--link_color, #3b82f6)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor =
-                    "var(--tgui--separator_color, #e0e0e0)";
-                }}
-                disabled={loading}
-              />
-            </div>
-          </List>
-        </Section>
+        {snack.text}
+      </Snackbar>
 
-        <SectionFooter>
-          <div
-            style={{
-              display: "flex",
-              gap: "8px",
-              flexDirection: "column",
-            }}
-          >
-            <Button
+      <div className="min-h-screen px-4 py-8 bg-linear-to-br from-[#070615] via-[#0a0a1a] to-[#070615]">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-linear-to-br from-white/95 to-gray-50/95 dark:from-gray-800/95 dark:to-gray-900/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-white/20 dark:border-gray-700/50">
+            <div className="space-y-4">
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Prompt Text
+                </label>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder={DEFAULT_PROMPT}
+                  disabled={loading}
+                  rows={12}
+                  className="w-full px-5 py-4 border-2 border-gray-200 dark:border-gray-700 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 resize-y disabled:opacity-50 disabled:cursor-not-allowed font-medium leading-relaxed shadow-inner"
+                />
+                <div className="absolute bottom-3 right-3 text-xs text-gray-400 dark:text-gray-600">
+                  {customPrompt.length} karakter
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <button
               onClick={handleSave}
               disabled={loading}
-              style={{ width: "100%" }}
+              className="w-full py-4 px-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
             >
-              {loading ? <Spinner size="s" /> : "Simpan Prompt"}
-            </Button>
-            <Button
+              {loading ? (
+                <>
+                  <Spinner size="s" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  <span>Simpan Prompt</span>
+                </>
+              )}
+            </button>
+            <button
               onClick={handleReset}
               disabled={loading}
-              mode="outline"
-              style={{ width: "100%" }}
+              className="w-full py-4 px-6 border-2 border-gray-300 dark:border-gray-600 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100 shadow-md"
             >
               Reset ke Default
-            </Button>
+            </button>
           </div>
-        </SectionFooter>
+        </div>
       </div>
     </Page>
   );
