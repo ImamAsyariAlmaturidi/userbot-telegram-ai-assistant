@@ -30,6 +30,31 @@ function sleep(ms: number) {
 }
 
 /**
+ * Validasi session string format
+ * Session string Telegram biasanya dimulai dengan "1" dan panjang minimal tertentu
+ */
+function isValidSessionString(
+  sessionString: string | null | undefined
+): boolean {
+  if (!sessionString || typeof sessionString !== "string") {
+    return false;
+  }
+
+  // Session string tidak boleh kosong
+  if (sessionString.trim().length === 0) {
+    return false;
+  }
+
+  // Session string Telegram biasanya panjang (minimal 10 karakter)
+  // dan tidak boleh hanya whitespace
+  if (sessionString.trim().length < 10) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Start userbot untuk 1 user dengan retry sederhana
  * Juga setup error handler untuk auto-restart jika disconnect
  */
@@ -37,6 +62,14 @@ async function startUserbotForUser(
   sessionString: string,
   ownerUserId: string
 ): Promise<UserbotClient | null> {
+  // Validasi session string sebelum mencoba start
+  if (!isValidSessionString(sessionString)) {
+    console.error(
+      `❌ [${ownerUserId}] Invalid session string format. Session must be a non-empty string.`
+    );
+    return null;
+  }
+
   let attempt = 0;
   while (attempt < MAX_START_RETRIES) {
     attempt += 1;
@@ -140,8 +173,11 @@ async function loadAndStartUserbots() {
     const ownerUserId = String(user.telegramUserId);
     const sessionString = user.session as string;
 
-    if (!sessionString) {
-      console.warn(`⚠️  [${ownerUserId}] No session, skipping...`);
+    // Validasi session string sebelum mencoba start
+    if (!isValidSessionString(sessionString)) {
+      console.warn(
+        `⚠️  [${ownerUserId}] Invalid or empty session, skipping...`
+      );
       continue;
     }
 
@@ -214,6 +250,14 @@ async function watchUserbotStatus() {
       for (const user of usersWithSession) {
         const ownerUserId = String(user.telegramUserId);
         const sessionString = user.session as string;
+
+        // Validasi session string
+        if (!isValidSessionString(sessionString)) {
+          console.warn(
+            `⚠️ [${ownerUserId}] Invalid session string, skipping...`
+          );
+          continue;
+        }
 
         const existingClient = runningUserbots.get(ownerUserId);
 
