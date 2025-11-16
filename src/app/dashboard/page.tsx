@@ -46,6 +46,38 @@ export default function DashboardPage() {
           router.push("/login");
           return;
         }
+
+        // Cek apakah user ada di database dengan session yang valid
+        if (telegramUserId) {
+          try {
+            const userCheckResponse = await fetch(
+              `/api/users/check?telegram_user_id=${telegramUserId}`
+            );
+            const userCheckData = await userCheckResponse.json();
+
+            // Jika user tidak ada atau tidak punya session valid, redirect ke login
+            if (
+              !userCheckData.exists ||
+              !userCheckData.hasSession ||
+              !userCheckData.hasValidSession
+            ) {
+              console.log(
+                "[Dashboard] User tidak ditemukan atau tidak punya session valid, redirecting to login"
+              );
+              router.push("/login");
+              return;
+            }
+          } catch (userCheckError) {
+            console.error(
+              "[Dashboard] Error checking user data:",
+              userCheckError
+            );
+            // Jika error, tetap redirect ke login untuk safety
+            router.push("/login");
+            return;
+          }
+        }
+
         console.log("[Dashboard] Auth check passed");
       } catch (error) {
         console.error("Error checking auth:", error);
@@ -57,7 +89,7 @@ export default function DashboardPage() {
     };
 
     checkAuth();
-  }, [router]);
+  }, [router, telegramUserId]);
 
   // Fetch userbot status
   useEffect(() => {
@@ -85,12 +117,13 @@ export default function DashboardPage() {
 
   // Save user data and init data when init data is available
   // Hanya update init data, tidak reset prompt
+  // User harus sudah ada (dibuat dari login), tidak boleh create dari sini
   useEffect(() => {
     if (!initData || !telegramUserId || checkingAuth) return;
 
     const saveUserData = async () => {
       try {
-        await fetch("/api/users/save", {
+        const response = await fetch("/api/users/save", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -105,13 +138,33 @@ export default function DashboardPage() {
             init_data_chat: initData.chat,
           }),
         });
-      } catch (error) {
+
+        const data = await response.json();
+
+        // Jika user tidak ditemukan (requiresLogin), redirect ke login
+        if (data.requiresLogin || response.status === 404) {
+          console.log("[Dashboard] User tidak ditemukan, redirecting to login");
+          router.push("/login");
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to save user data");
+        }
+      } catch (error: any) {
         console.error("Error saving user data:", error);
+        // Jika error karena user tidak ada, redirect ke login
+        if (
+          error.message?.includes("not found") ||
+          error.message?.includes("login")
+        ) {
+          router.push("/login");
+        }
       }
     };
 
     saveUserData();
-  }, [initData, telegramUserId, checkingAuth]);
+  }, [initData, telegramUserId, checkingAuth, router]);
   const handleToggleUserbot = async (enabled: boolean) => {
     if (!telegramUserId || togglingUserbot) return;
 

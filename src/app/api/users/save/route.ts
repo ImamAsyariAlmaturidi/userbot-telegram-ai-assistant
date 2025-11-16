@@ -28,11 +28,25 @@ export async function POST(req: NextRequest) {
 
     console.log(`[API] Saving user data for telegram_user_id: ${userId}`);
 
-    // Check if user exists
+    // Check if user exists - user hanya boleh dibuat dari /api/auth/start (verify code)
     const existingUser = await prisma.user.findUnique({
       where: { telegramUserId: userId },
-      select: { id: true, telegramUserId: true },
+      select: { id: true, telegramUserId: true, session: true },
     });
+
+    // Jika user tidak ada, return error - user harus login dulu
+    if (!existingUser) {
+      console.warn(
+        `[API] User dengan telegram_user_id ${userId} tidak ditemukan. User harus login terlebih dahulu.`
+      );
+      return NextResponse.json(
+        {
+          error: "User not found. Please login first.",
+          requiresLogin: true,
+        },
+        { status: 404 }
+      );
+    }
 
     // Hanya update field yang dikirim, jangan reset prompt atau session
     const userData: any = {};
@@ -44,39 +58,18 @@ export async function POST(req: NextRequest) {
     if (init_data_chat !== undefined)
       userData.initDataChat = init_data_chat || null;
 
-    let result;
-    if (existingUser) {
-      // Update existing user - hanya field yang dikirim
-      console.log(
-        `[API] Updating existing user with telegram_user_id: ${userId}`
-      );
-      result = await prisma.user.update({
-        where: { telegramUserId: userId },
-        data: userData,
-        select: {
-          telegramUserId: true,
-          customPrompt: true,
-        },
-      });
-    } else {
-      // Insert new user
-      // Note: session is required, using placeholder that will be updated on login
-      console.log(`[API] Inserting new user with telegram_user_id: ${userId}`);
-      result = await prisma.user.create({
-        data: {
-          telegramUserId: userId,
-          session: `pending_${userId}`, // Placeholder, will be updated on login
-          phoneNumber: phone_number || "",
-          initDataRaw: init_data_raw || null,
-          initDataUser: init_data_user || null,
-          initDataChat: init_data_chat || null,
-        },
-        select: {
-          telegramUserId: true,
-          customPrompt: true,
-        },
-      });
-    }
+    // Update existing user - hanya field yang dikirim
+    console.log(
+      `[API] Updating existing user with telegram_user_id: ${userId}`
+    );
+    const result = await prisma.user.update({
+      where: { telegramUserId: userId },
+      data: userData,
+      select: {
+        telegramUserId: true,
+        customPrompt: true,
+      },
+    });
 
     // Convert BigInt to string untuk JSON serialization
     const responseData = {
