@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { logoutClient } from "@/lib/telegram/auth";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    await logoutClient();
+    const body = await req.json();
+    const sessionString = body?.sessionString as string | undefined;
+
+    await logoutClient(sessionString);
     return NextResponse.json({ ok: true });
   } catch (error: any) {
     return NextResponse.json(

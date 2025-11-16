@@ -38,21 +38,36 @@ export default function Home() {
             });
 
             const checkData = await checkRes.json();
-            if (checkData?.exists && checkData?.hasSession) {
-              // User exists in database with valid session, restore session and redirect
+            if (
+              checkData?.exists &&
+              checkData?.hasSession &&
+              checkData?.hasValidSession
+            ) {
+              // User exists in database with valid session, restore session dari database dan simpan ke localStorage
               console.log("[Home] User exists in database, restoring session");
               try {
-                // Restore session cookie
-                await fetch("/api/auth/restore-session", {
+                // Restore session dari database
+                const restoreRes = await fetch("/api/auth/restore-session", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                   },
-                  credentials: "include",
                   body: JSON.stringify({
                     telegram_user_id: telegramUserId,
                   }),
                 });
+
+                const restoreData = await restoreRes.json();
+                if (restoreData.ok && restoreData.sessionString) {
+                  // Simpan session ke localStorage
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem(
+                      "tg_session",
+                      restoreData.sessionString
+                    );
+                    console.log("[Home] Session restored to localStorage");
+                  }
+                }
               } catch (err) {
                 console.error("[Home] Error restoring session:", err);
               }

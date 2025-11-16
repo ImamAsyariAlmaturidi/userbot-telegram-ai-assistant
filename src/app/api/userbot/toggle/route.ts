@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,11 +33,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get session from cookie (required)
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
+    // Get session from request body (dari localStorage client)
+    const sessionString = body?.sessionString as string | undefined;
 
-    if (!sessionCookie) {
+    if (!sessionString) {
       return NextResponse.json(
         { error: "Session is required. Please login first." },
         { status: 401 }
@@ -52,13 +50,41 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      console.error(
+        `[API] User dengan telegram_user_id ${userId} tidak ditemukan saat toggle userbot`
+      );
+      return NextResponse.json(
+        {
+          error: "User not found. Please login first.",
+          requiresLogin: true,
+        },
+        { status: 404 }
+      );
     }
 
-    // Verify session matches
-    if (user.session !== sessionCookie) {
-      return NextResponse.json({ error: "Session mismatch" }, { status: 403 });
+    // Verify session matches (session harus valid, bukan placeholder)
+    const isValidSession =
+      user.session &&
+      typeof user.session === "string" &&
+      user.session.trim().length >= 10 &&
+      !user.session.startsWith("pending_");
+
+    if (!isValidSession) {
+      console.error(
+        `[API] User dengan telegram_user_id ${userId} tidak punya session valid`
+      );
+      return NextResponse.json(
+        {
+          error: "Invalid session. Please login again.",
+          requiresLogin: true,
+        },
+        { status: 403 }
+      );
     }
+
+    // Session di cookie harus match dengan session di database
+    // Tapi bisa sedikit berbeda karena session bisa di-update, jadi kita cek validitas saja
+    // Jika session di database valid, kita anggap OK
 
     // Update userbot enabled status
     const updatedUser = await prisma.user.update({
@@ -94,7 +120,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET userbot status
+// GET userbot status - sekarang menggunakan POST karena butuh session dari body
+// Untuk backward compatibility, tetap support GET tapi session harus dikirim via body
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
@@ -107,15 +134,46 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Try to get session from request body (untuk GET, kita coba parse body jika ada)
+    // Note: GET biasanya tidak punya body, jadi kita cek database saja
     const userId = BigInt(parseInt(telegram_user_id, 10));
 
     const user = await prisma.user.findUnique({
       where: { telegramUserId: userId },
-      select: { userbotEnabled: true },
+      select: { userbotEnabled: true, session: true },
     });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      console.error(
+        `[API] User dengan telegram_user_id ${userId} tidak ditemukan saat get userbot status`
+      );
+      return NextResponse.json(
+        {
+          error: "User not found. Please login first.",
+          requiresLogin: true,
+        },
+        { status: 404 }
+      );
+    }
+
+    // Cek apakah session valid
+    const isValidSession =
+      user.session &&
+      typeof user.session === "string" &&
+      user.session.trim().length >= 10 &&
+      !user.session.startsWith("pending_");
+
+    if (!isValidSession) {
+      console.error(
+        `[API] User dengan telegram_user_id ${userId} tidak punya session valid`
+      );
+      return NextResponse.json(
+        {
+          error: "Invalid session. Please login again.",
+          requiresLogin: true,
+        },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({

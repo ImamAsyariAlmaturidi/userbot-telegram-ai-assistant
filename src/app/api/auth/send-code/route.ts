@@ -64,18 +64,27 @@ export async function POST(req: Request) {
       });
     }
 
-    const result = await sendCode(phoneNumber);
+    // Get session from request body (dari localStorage client)
+    const sessionString = body?.sessionString as string | undefined;
 
-    // Jika sudah login, return status khusus
+    const result = await sendCode(phoneNumber, sessionString);
+
+    // Jika sudah login, return session string untuk disimpan di localStorage
     if (result?.alreadyLoggedIn) {
       return NextResponse.json({
         ok: true,
         alreadyLoggedIn: true,
+        sessionString: result.sessionString,
         message: "Already logged in",
       });
     }
 
-    return NextResponse.json({ ok: true });
+    // Return phoneCodeHash dan sessionString untuk disimpan di localStorage
+    return NextResponse.json({
+      ok: true,
+      phoneCodeHash: result.phoneCodeHash,
+      sessionString: result.sessionString,
+    });
   } catch (error: any) {
     return NextResponse.json(
       { ok: false, error: error?.message ?? "Unknown error" },

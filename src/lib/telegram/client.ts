@@ -21,17 +21,20 @@ export function createTelegramClient(
   } = clientConfig || {};
 
   // Validasi session string sebelum membuat StringSession
+  // Untuk user baru yang belum login, sessionString bisa empty string (untuk membuat session baru)
   const sessionString = config.sessionString || "";
-  if (
-    !sessionString ||
-    typeof sessionString !== "string" ||
-    sessionString.trim().length < 10
-  ) {
-    throw new Error(
-      "Invalid session string format. Session must be a non-empty string with valid format."
-    );
+
+  // Jika sessionString tidak empty, harus valid (minimal 10 karakter)
+  // Jika empty, kita buat session baru (untuk sendCode pada user baru)
+  if (sessionString && sessionString.trim().length > 0) {
+    if (typeof sessionString !== "string" || sessionString.trim().length < 10) {
+      throw new Error(
+        "Invalid session string format. Session must be a non-empty string with valid format."
+      );
+    }
   }
 
+  // StringSession bisa dibuat dengan empty string untuk session baru
   const session = new StringSession(sessionString);
   const client = new TelegramClient(session, config.apiId, config.apiHash, {
     connectionRetries,
@@ -49,6 +52,7 @@ export function createTelegramClient(
 
 /**
  * Creates a Telegram client from environment variables
+ * Untuk user baru yang belum punya session, bisa pass undefined atau empty string
  */
 export function createClientFromEnv(sessionString?: string): TelegramClient {
   const apiId = Number(process.env.TG_API_ID);
@@ -58,9 +62,14 @@ export function createClientFromEnv(sessionString?: string): TelegramClient {
     throw new Error("Missing TG_API_ID / TG_API_HASH in environment variables");
   }
 
+  // Jika sessionString undefined atau empty, gunakan empty string untuk membuat session baru
+  // Ini diperlukan untuk sendCode pada user baru
+  const finalSessionString =
+    sessionString || process.env.TG_SESSION_STRING || "";
+
   return createTelegramClient({
     apiId,
     apiHash,
-    sessionString: sessionString || process.env.TG_SESSION_STRING,
+    sessionString: finalSessionString,
   });
 }

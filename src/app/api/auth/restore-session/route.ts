@@ -1,8 +1,11 @@
 "use server";
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Restore session dari database untuk user yang sudah ada
+ * Return session string untuk disimpan di localStorage client-side
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -26,28 +29,33 @@ export async function POST(req: NextRequest) {
       select: { session: true },
     });
 
-    if (!user || !user.session || user.session === `pending_${userId}`) {
+    if (!user || !user.session) {
       return NextResponse.json(
         { ok: false, error: "No valid session found" },
         { status: 404 }
       );
     }
 
-    // Set session cookie
-    const cookieStore = await cookies();
-    const isProduction = process.env.NODE_ENV === "production";
-    cookieStore.set("tg_session", user.session as unknown as string, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    });
+    // Validasi session string
+    const isValidSession =
+      user.session &&
+      typeof user.session === "string" &&
+      user.session.trim().length >= 10 &&
+      !user.session.startsWith("pending_");
 
-    console.log("[restore-session] Session cookie set for user:", userId);
+    if (!isValidSession) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid session format" },
+        { status: 404 }
+      );
+    }
 
+    console.log("[restore-session] Session restored for user:", userId);
+
+    // Return session string untuk disimpan di localStorage client-side
     return NextResponse.json({
       ok: true,
+      sessionString: user.session,
       message: "Session restored",
     });
   } catch (error: any) {

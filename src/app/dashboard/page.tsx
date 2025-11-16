@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [userbotEnabled, setUserbotEnabled] = useState(false);
   const [loadingUserbotStatus, setLoadingUserbotStatus] = useState(true);
   const [togglingUserbot, setTogglingUserbot] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false); // Prevent multiple redirects
   const [snack, setSnack] = useState<{
     open: boolean;
     text: string;
@@ -36,23 +37,62 @@ export default function DashboardPage() {
   const userName =
     initData?.user?.first_name || initData?.user?.username || "User";
 
-  // Check auth status on mount - harus ada session di database
+  // Check auth status on mount - cek localStorage session
   useEffect(() => {
+    // Prevent multiple checks and redirects
+    if (isRedirecting) return;
+
     const checkAuth = async () => {
       try {
-        const status = await getAuthStatus();
-        if (!status?.isAuthorized || !status?.sessionString) {
-          console.log("[Dashboard] No session found, redirecting to login");
+        // Cek localStorage session dulu
+        const sessionString =
+          typeof window !== "undefined"
+            ? localStorage.getItem("tg_session")
+            : null;
+
+        if (!sessionString) {
+          console.log(
+            "[Dashboard] No session in localStorage, redirecting to login"
+          );
+          setIsRedirecting(true);
           router.push("/login");
           return;
         }
 
+        // Validasi session dengan server
+        const status = await getAuthStatus();
+
+        if (!status?.isAuthorized || !status?.sessionString) {
+          console.log("[Dashboard] Session tidak valid, redirecting to login");
+          // Hapus session yang tidak valid dari localStorage
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("tg_session");
+          }
+          setIsRedirecting(true);
+          router.push("/login");
+          return;
+        }
+
+        // Update session di localStorage jika ada update dari server
+        if (status.sessionString && status.sessionString !== sessionString) {
+          if (typeof window !== "undefined") {
+            localStorage.setItem("tg_session", status.sessionString);
+            console.log("[Dashboard] Updated session in localStorage");
+          }
+        }
+
         // Cek apakah user ada di database dengan session yang valid
+        // Hanya cek jika telegramUserId sudah ada (tidak undefined)
         if (telegramUserId) {
           try {
             const userCheckResponse = await fetch(
               `/api/users/check?telegram_user_id=${telegramUserId}`
             );
+
+            if (!userCheckResponse.ok) {
+              throw new Error("Failed to check user");
+            }
+
             const userCheckData = await userCheckResponse.json();
 
             // Jika user tidak ada atau tidak punya session valid, redirect ke login
@@ -64,6 +104,11 @@ export default function DashboardPage() {
               console.log(
                 "[Dashboard] User tidak ditemukan atau tidak punya session valid, redirecting to login"
               );
+              // Hapus session dari localStorage
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("tg_session");
+              }
+              setIsRedirecting(true);
               router.push("/login");
               return;
             }
@@ -73,14 +118,28 @@ export default function DashboardPage() {
               userCheckError
             );
             // Jika error, tetap redirect ke login untuk safety
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("tg_session");
+            }
+            setIsRedirecting(true);
             router.push("/login");
             return;
           }
+        } else {
+          // Jika telegramUserId belum ada, tunggu dulu (mungkin masih loading init data)
+          // Jangan langsung redirect, karena init data mungkin masih loading
+          console.log("[Dashboard] Waiting for telegramUserId...");
+          return;
         }
 
         console.log("[Dashboard] Auth check passed");
       } catch (error) {
         console.error("Error checking auth:", error);
+        // Hapus session dari localStorage jika error
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("tg_session");
+        }
+        setIsRedirecting(true);
         router.push("/login");
         return;
       } finally {
@@ -89,14 +148,29 @@ export default function DashboardPage() {
     };
 
     checkAuth();
-  }, [router, telegramUserId]);
+  }, [router, telegramUserId, isRedirecting]);
 
   // Fetch userbot status
   useEffect(() => {
-    if (!telegramUserId || checkingAuth) return;
+    if (!telegramUserId || checkingAuth || isRedirecting) return;
 
     const fetchUserbotStatus = async () => {
       try {
+        // Get session dari localStorage
+        const sessionString =
+          typeof window !== "undefined"
+            ? localStorage.getItem("tg_session")
+            : null;
+
+        if (!sessionString) {
+          console.log(
+            "[Dashboard] No session in localStorage for userbot status"
+          );
+          return;
+        }
+
+        // GET method tidak support body, jadi kita pakai query param untuk telegram_user_id
+        // Session validation dilakukan di server dengan cek database
         const response = await fetch(
           `/api/userbot/toggle?telegram_user_id=${telegramUserId}`
         );
@@ -104,6 +178,17 @@ export default function DashboardPage() {
 
         if (data.success) {
           setUserbotEnabled(data.userbotEnabled || false);
+        } else if (
+          data.requiresLogin ||
+          response.status === 404 ||
+          response.status === 403
+        ) {
+          // Jika user tidak ditemukan atau session tidak valid, redirect ke login
+          console.log(
+            "[Dashboard] User tidak ditemukan atau session tidak valid saat fetch status, redirecting to login"
+          );
+          setIsRedirecting(true);
+          router.push("/login");
         }
       } catch (error) {
         console.error("Error fetching userbot status:", error);
@@ -113,17 +198,16 @@ export default function DashboardPage() {
     };
 
     fetchUserbotStatus();
-  }, [telegramUserId, checkingAuth]);
+  }, [telegramUserId, checkingAuth, isRedirecting, router]);
 
   // Save user data and init data when init data is available
   // Hanya update init data, tidak reset prompt
-  // User harus sudah ada (dibuat dari login), tidak boleh create dari sini
   useEffect(() => {
     if (!initData || !telegramUserId || checkingAuth) return;
 
     const saveUserData = async () => {
       try {
-        const response = await fetch("/api/users/save", {
+        await fetch("/api/users/save", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -138,35 +222,30 @@ export default function DashboardPage() {
             init_data_chat: initData.chat,
           }),
         });
-
-        const data = await response.json();
-
-        // Jika user tidak ditemukan (requiresLogin), redirect ke login
-        if (data.requiresLogin || response.status === 404) {
-          console.log("[Dashboard] User tidak ditemukan, redirecting to login");
-          router.push("/login");
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to save user data");
-        }
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error saving user data:", error);
-        // Jika error karena user tidak ada, redirect ke login
-        if (
-          error.message?.includes("not found") ||
-          error.message?.includes("login")
-        ) {
-          router.push("/login");
-        }
       }
     };
 
     saveUserData();
-  }, [initData, telegramUserId, checkingAuth, router]);
+  }, [initData, telegramUserId, checkingAuth]);
   const handleToggleUserbot = async (enabled: boolean) => {
-    if (!telegramUserId || togglingUserbot) return;
+    if (!telegramUserId || togglingUserbot || isRedirecting) return;
+
+    // Get session dari localStorage
+    const sessionString =
+      typeof window !== "undefined" ? localStorage.getItem("tg_session") : null;
+
+    if (!sessionString) {
+      setSnack({
+        open: true,
+        text: "Session tidak ditemukan. Silakan login ulang.",
+        tone: "critical",
+      });
+      setIsRedirecting(true);
+      router.push("/login");
+      return;
+    }
 
     setTogglingUserbot(true);
     try {
@@ -178,6 +257,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           telegram_user_id: telegramUserId,
           enabled,
+          sessionString: sessionString,
         }),
       });
 
@@ -193,10 +273,48 @@ export default function DashboardPage() {
           tone: "positive",
         });
       } else {
+        // Jika requiresLogin, redirect ke login
+        if (
+          data.requiresLogin ||
+          response.status === 404 ||
+          response.status === 403
+        ) {
+          console.log(
+            "[Dashboard] User tidak ditemukan atau session tidak valid saat toggle, redirecting to login"
+          );
+          setIsRedirecting(true);
+          setSnack({
+            open: true,
+            text: "Session tidak valid. Silakan login ulang.",
+            tone: "critical",
+          });
+          setTimeout(() => {
+            router.push("/login");
+          }, 2000);
+          return;
+        }
         throw new Error(data.error || "Gagal mengubah status AI");
       }
     } catch (error: any) {
       console.error("Error toggling userbot:", error);
+      // Jika error karena user tidak ada, redirect ke login
+      if (
+        !isRedirecting &&
+        (error.message?.includes("not found") ||
+          error.message?.includes("login") ||
+          error.message?.includes("session"))
+      ) {
+        setIsRedirecting(true);
+        setSnack({
+          open: true,
+          text: "Session tidak valid. Silakan login ulang.",
+          tone: "critical",
+        });
+        setTimeout(() => {
+          router.push("/login");
+        }, 2000);
+        return;
+      }
       setSnack({
         open: true,
         text: error.message || "Gagal mengubah status AI",

@@ -10,7 +10,7 @@ import {
   Button,
   Spinner,
   Snackbar,
-  Cell,
+  Input,
 } from "@telegram-apps/telegram-ui";
 import { SectionFooter } from "@telegram-apps/telegram-ui/dist/components/Blocks/Section/components/SectionFooter/SectionFooter";
 import { useTranslations } from "next-intl";
@@ -27,6 +27,7 @@ function VerifyPageContent() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [requiresPassword, setRequiresPassword] = useState(false);
   const [snack, setSnack] = useState<{
     open: boolean;
     text: string;
@@ -34,14 +35,15 @@ function VerifyPageContent() {
   }>({ open: false, text: "", tone: "default" });
 
   useEffect(() => {
-    if (phoneCode.join("").length === 5) {
+    // Hanya auto-submit code jika belum butuh password
+    if (!requiresPassword && phoneCode.join("").length === 5) {
       // Sedikit delay supaya input terakhir sempat dirender
       const timeout = setTimeout(() => {
         handleVerifyCode();
       }, 300);
       return () => clearTimeout(timeout);
     }
-  }, [phoneCode]);
+  }, [phoneCode, requiresPassword]);
 
   // Check auth status first - if already logged in, redirect to dashboard
   useEffect(() => {
@@ -95,23 +97,40 @@ function VerifyPageContent() {
             });
 
             const checkData = await checkRes.json();
-            if (checkData?.exists && checkData?.hasSession) {
-              // User exists with valid session, restore session and redirect
+            if (
+              checkData?.exists &&
+              checkData?.hasSession &&
+              checkData?.hasValidSession
+            ) {
+              // User exists with valid session, restore session dari database dan simpan ke localStorage
               console.log(
                 "[VerifyPage] User exists in database, restoring session"
               );
               try {
-                // Restore session cookie
-                await fetch("/api/auth/restore-session", {
+                // Restore session dari database
+                const restoreRes = await fetch("/api/auth/restore-session", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
                   },
-                  credentials: "include",
                   body: JSON.stringify({
                     telegram_user_id: telegramUserId,
                   }),
                 });
+
+                const restoreData = await restoreRes.json();
+                if (restoreData.ok && restoreData.sessionString) {
+                  // Simpan session ke localStorage
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem(
+                      "tg_session",
+                      restoreData.sessionString
+                    );
+                    console.log(
+                      "[VerifyPage] Session restored to localStorage"
+                    );
+                  }
+                }
               } catch (err) {
                 console.error("[VerifyPage] Error restoring session:", err);
               }
@@ -142,13 +161,36 @@ function VerifyPageContent() {
 
   async function handleVerifyCode() {
     const codeString = phoneCode.join("");
-    if (codeString.length !== 5) {
-      setSnack({
-        open: true,
-        text: t("invalidCode"),
-        tone: "critical",
-      });
-      return;
+
+    // Jika butuh password, validasi password dulu
+    if (requiresPassword) {
+      if (!password || password.trim().length === 0) {
+        setSnack({
+          open: true,
+          text: "Password is required",
+          tone: "critical",
+        });
+        return;
+      }
+      // Pastikan code masih ada (dari input sebelumnya)
+      if (codeString.length !== 5) {
+        setSnack({
+          open: true,
+          text: "Code is required",
+          tone: "critical",
+        });
+        return;
+      }
+    } else {
+      // Validasi code jika belum butuh password
+      if (codeString.length !== 5) {
+        setSnack({
+          open: true,
+          text: t("invalidCode"),
+          tone: "critical",
+        });
+        return;
+      }
     }
 
     if (!phoneNumber) {
@@ -162,38 +204,64 @@ function VerifyPageContent() {
 
     setLoading(true);
     try {
-      console.log("[VerifyPage] Verifying code for:", phoneNumber);
       const data = await verifyLoginCode(phoneNumber, codeString, password);
-      console.log("[VerifyPage] Verification successful:", data);
 
-      setSnack({
-        open: true,
-        text: data?.message || t("loginSuccess"),
-        tone: "positive",
-      });
-
-      // Clear session storage
-      if (typeof window !== "undefined") {
-        sessionStorage.removeItem("login_phone");
+      // Check if requires password
+      if (data?.requiresPassword) {
+        setRequiresPassword(true);
+        setSnack({
+          open: true,
+          text: "Account requires 2FA password. Please enter your password.",
+          tone: "default",
+        });
+        setLoading(false);
+        return;
       }
 
-      // Redirect to dashboard after successful login
-      setTimeout(() => {
+      // Check if success
+      if (data?.ok && data?.sessionString) {
+        // Clear session storage
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("login_phone");
+        }
+
+        // Redirect to dashboard after successful login
         router.push("/dashboard");
-      }, 1000);
+        return;
+      }
+
+      // If not success and not requires password, show error
+      if (!requiresPassword) {
+        setSnack({
+          open: true,
+          text: data?.error || t("verifyCodeError"),
+          tone: "critical",
+        });
+        setPhoneCode([]);
+      } else {
+        // If requires password but failed, show error
+        setSnack({
+          open: true,
+          text: data?.error || "Invalid password. Please try again.",
+          tone: "critical",
+        });
+      }
     } catch (e: any) {
-      console.error("[VerifyPage] Verification error:", e);
-      const isNetworkError =
-        e instanceof TypeError &&
-        /fetch|network|Failed to fetch|Load failed/i.test(e?.message || "");
-      setSnack({
-        open: true,
-        text: isNetworkError
-          ? t("networkError")
-          : e?.message || t("verifyCodeError"),
-        tone: "critical",
-      });
-      setPhoneCode([]);
+      // Fallback error handling
+      if (!requiresPassword) {
+        setSnack({
+          open: true,
+          text: t("verifyCodeError"),
+          tone: "critical",
+        });
+        setPhoneCode([]);
+      } else {
+        setSnack({
+          open: true,
+          text: "Invalid password. Please try again.",
+          tone: "critical",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -247,22 +315,49 @@ function VerifyPageContent() {
         <div style={{ width: "100%", maxWidth: 420 }}>
           <Section>
             <List>
-              <div
-                style={{
-                  padding: "16px 0",
-                  display: "flex",
-                  justifyContent: "center",
-                }}
-              >
-                <PinInput
-                  label={t("codeLabel")}
-                  pinCount={5}
-                  value={phoneCode}
-                  onChange={(value) => {
-                    setTimeout(() => setPhoneCode(value), 0);
+              {!requiresPassword ? (
+                <div
+                  style={{
+                    padding: "16px 0",
+                    display: "flex",
+                    justifyContent: "center",
                   }}
-                />
-              </div>
+                >
+                  <PinInput
+                    label={t("codeLabel")}
+                    pinCount={5}
+                    value={phoneCode}
+                    onChange={(value) => {
+                      setTimeout(() => setPhoneCode(value), 0);
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <Input
+                    header="2FA Password"
+                    placeholder="Enter your 2FA password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    type="password"
+                    disabled={loading}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && password && !loading) {
+                        handleVerifyCode();
+                      }
+                    }}
+                  />
+                  <SectionFooter>
+                    <Button
+                      onClick={handleVerifyCode}
+                      disabled={loading || !password}
+                      loading={loading}
+                    >
+                      Continue
+                    </Button>
+                  </SectionFooter>
+                </>
+              )}
             </List>
           </Section>
         </div>

@@ -1,36 +1,31 @@
 "use server";
 
 import { TelegramClient, Api } from "telegram";
-import { cookies } from "next/headers";
 import { createClientFromEnv } from "./client";
-import startBot from "@/app/services/handler/userbotAgent";
 import { prisma } from "@/lib/prisma";
 
 /**
  * Check if user is authorized
- * Cek session dari cookie, lalu validasi dengan database
+ * Cek session dari request (dikirim dari client via localStorage)
  */
-export async function checkAuthStatus(): Promise<{
+export async function checkAuthStatus(sessionString?: string): Promise<{
   isAuthorized: boolean;
   sessionString?: string;
 }> {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
-
-  if (!sessionCookie) {
-    console.log("[checkAuthStatus] No session cookie found");
+  if (!sessionString) {
+    console.log("[checkAuthStatus] No session string provided");
     return { isAuthorized: false };
   }
 
   // Validasi session dengan Telegram terlebih dahulu
   // Ini lebih reliable karena Prisma bisa error di Vercel
-  const client = createClientFromEnv(sessionCookie);
+  const client = createClientFromEnv(sessionString);
   try {
     await client.connect();
     const isAuthorized = await client.isUserAuthorized();
 
     if (isAuthorized) {
-      const sessionString = client.session.save();
+      const updatedSessionString = client.session.save();
 
       // Update session di database jika berbeda (non-blocking)
       // Jangan return false jika database error, karena Telegram sudah valid
@@ -50,7 +45,7 @@ export async function checkAuthStatus(): Promise<{
             if (existingUser) {
               await prisma.user.updateMany({
                 where: { telegramUserId: telegramUserId },
-                data: { session: sessionString as unknown as string },
+                data: { session: updatedSessionString as unknown as string },
               });
             }
           } catch (dbErr) {
@@ -73,20 +68,18 @@ export async function checkAuthStatus(): Promise<{
 
       return {
         isAuthorized: true,
-        sessionString: sessionString as unknown as string,
+        sessionString: updatedSessionString as unknown as string,
       };
     }
 
-    // Session tidak valid di Telegram, hapus cookie
-    cookieStore.delete("tg_session");
-    cookieStore.delete("tg_phone_hash");
+    // Session tidak valid di Telegram
     return { isAuthorized: false };
   } catch (err) {
     console.error("[checkAuthStatus] Error checking auth status:", err);
     // Jika Telegram error, coba cek database sebagai fallback
     try {
       const user = await prisma.user.findFirst({
-        where: { session: sessionCookie },
+        where: { session: sessionString },
         select: { telegramUserId: true, session: true },
       });
       if (user) {
@@ -107,31 +100,24 @@ export async function checkAuthStatus(): Promise<{
 
 /**
  * Send verification code to phone number
+ * phoneCodeHash akan dikembalikan untuk disimpan di localStorage client-side
  */
 export async function sendCode(
-  phoneNumber: string
-): Promise<{ alreadyLoggedIn?: boolean }> {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
-  const client = createClientFromEnv(sessionCookie);
+  phoneNumber: string,
+  sessionString?: string
+): Promise<{
+  alreadyLoggedIn?: boolean;
+  phoneCodeHash?: string;
+  sessionString?: string;
+}> {
+  const client = createClientFromEnv(sessionString);
 
   try {
     await client.connect();
 
     if (await client.isUserAuthorized()) {
-      // Update session cookie dengan yang valid
-      const sessionString = client.session.save();
-      const isProduction = process.env.NODE_ENV === "production";
-      cookieStore.set("tg_session", sessionString as unknown as string, {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
-        maxAge: 60 * 60 * 24 * 7, // 7 hari
-        path: "/",
-      });
-
-      // Hapus phone hash jika ada
-      cookieStore.delete("tg_phone_hash");
+      // User sudah login, return session string untuk disimpan di localStorage
+      const updatedSessionString = client.session.save();
 
       // Coba save ke database (non-blocking)
       try {
@@ -141,12 +127,12 @@ export async function sendCode(
           await prisma.user.upsert({
             where: { telegramUserId: telegramUserId },
             update: {
-              session: sessionString as unknown as string,
+              session: updatedSessionString as unknown as string,
               phoneNumber: phoneNumber,
             },
             create: {
               telegramUserId: telegramUserId,
-              session: sessionString as unknown as string,
+              session: updatedSessionString as unknown as string,
               phoneNumber: phoneNumber,
             },
           });
@@ -156,9 +142,11 @@ export async function sendCode(
         // Jangan throw, karena user sudah login
       }
 
-      startBot(sessionCookie);
       console.log("✅ Already logged in — skip sendCode");
-      return { alreadyLoggedIn: true };
+      return {
+        alreadyLoggedIn: true,
+        sessionString: updatedSessionString as unknown as string,
+      };
     }
 
     console.log("📨 Sending code to", phoneNumber);
@@ -171,34 +159,18 @@ export async function sendCode(
       })
     );
 
-    const sessionString = client.session.save();
-    console.log("[sendCode] sessionString:", sessionString);
-    const isProduction = process.env.NODE_ENV === "production";
-    cookieStore.set("tg_session", sessionString as unknown as string, {
-      httpOnly: true,
-      secure: isProduction, // HTTPS required in production
-      sameSite: isProduction ? "none" : "lax", // "none" for cross-site in production
-      maxAge: 300,
-      path: "/",
-    });
-    console.log(
-      "[sendCode] phoneCodeHash:",
-      (result as Api.auth.SentCode).phoneCodeHash
-    );
-    cookieStore.set(
-      "tg_phone_hash",
-      (result as Api.auth.SentCode).phoneCodeHash,
-      {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
-        maxAge: 300,
-        path: "/",
-      }
-    );
+    const tempSessionString = client.session.save();
+    const phoneCodeHash = (result as Api.auth.SentCode).phoneCodeHash;
 
-    console.log("✅ Code sent & session saved");
-    return { alreadyLoggedIn: false };
+    console.log("[sendCode] phoneCodeHash:", phoneCodeHash);
+    console.log("[sendCode] tempSessionString:", tempSessionString);
+
+    console.log("✅ Code sent");
+    return {
+      alreadyLoggedIn: false,
+      phoneCodeHash: phoneCodeHash,
+      sessionString: tempSessionString as unknown as string,
+    };
   } finally {
     await client.disconnect();
   }
@@ -206,84 +178,176 @@ export async function sendCode(
 
 /**
  * Complete login with phone code
+ * phoneCodeHash dan sessionString harus dikirim dari client (localStorage)
  */
 export async function startClient(params: {
   phoneNumber: string;
   phoneCode: string;
   password?: string;
+  phoneCodeHash: string;
+  sessionString: string;
 }): Promise<{ sessionString: string }> {
-  const { phoneNumber, phoneCode, password } = params;
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
-  const phoneCodeHash = cookieStore.get("tg_phone_hash")?.value;
-  if (!phoneCodeHash)
-    throw new Error("Missing phoneCodeHash — sendCode first!");
+  const { phoneNumber, phoneCode, password, phoneCodeHash, sessionString } =
+    params;
 
-  const client = createClientFromEnv(sessionCookie);
+  if (!phoneCodeHash) {
+    throw new Error("Missing phoneCodeHash — sendCode first!");
+  }
+
+  if (!sessionString) {
+    throw new Error("Missing sessionString — sendCode first!");
+  }
+
+  const client = createClientFromEnv(sessionString);
   try {
     await client.connect();
 
     if (await client.isUserAuthorized()) {
       console.log("✅ Already logged in");
-      const sessionString = client.session.save();
-      return { sessionString: sessionString as unknown as string };
+      const updatedSessionString = client.session.save();
+      return { sessionString: updatedSessionString as unknown as string };
     }
 
     console.log("🔐 Signing in...");
 
-    let me = await client.invoke(
-      new Api.auth.SignIn({
-        phoneNumber,
-        phoneCodeHash,
-        phoneCode,
-      })
-    );
-
-    // Handle 2FA
-    if ((me as any)._ === "auth.authorizationSignUpRequired" && password) {
+    let me;
+    try {
       me = await client.invoke(
-        new Api.auth.CheckPassword({
-          password: await (client as any)._client?.computeCheckPassword(
-            password
-          ),
+        new Api.auth.SignIn({
+          phoneNumber,
+          phoneCodeHash,
+          phoneCode,
         })
       );
+    } catch (err: any) {
+      // Handle 2FA - jika error SESSION_PASSWORD_NEEDED
+      if (err.errorMessage === "SESSION_PASSWORD_NEEDED") {
+        // Jika password sudah dikirim, langsung coba CheckPassword
+        if (password && password.trim().length > 0) {
+          try {
+            // Get password info - perlu fetch dari account.GetPassword()
+            // Error SESSION_PASSWORD_NEEDED tidak selalu include password info
+            let passwordInfo = (err as any).password;
+
+            // Jika tidak ada di error, fetch dari GetPassword
+            if (!passwordInfo) {
+              passwordInfo = await client.invoke(new Api.account.GetPassword());
+            }
+
+            // Compute SRP hash menggunakan passwordInfo dan password
+            // Di gramjs, gunakan computeCheck dari telegram/Password module
+            // computeCheck mengembalikan InputCheckPasswordSRP yang diperlukan untuk CheckPassword
+            let inputCheckPasswordSRP: Api.InputCheckPasswordSRP;
+
+            try {
+              // Import helper dari telegram/Password
+              const PasswordModule = await import("telegram/Password");
+              // computeCheck mengembalikan InputCheckPasswordSRP
+              inputCheckPasswordSRP = await PasswordModule.computeCheck(
+                passwordInfo,
+                password
+              );
+            } catch (importErr: any) {
+              // Jika import gagal, coba dari _client (fallback)
+              const clientInternal = (client as any)._client;
+              if (
+                clientInternal &&
+                typeof clientInternal.computeCheckPassword === "function"
+              ) {
+                try {
+                  inputCheckPasswordSRP =
+                    await clientInternal.computeCheckPassword(
+                      passwordInfo,
+                      password
+                    );
+                } catch (computeErr: any) {
+                  // Coba sync
+                  try {
+                    inputCheckPasswordSRP = clientInternal.computeCheckPassword(
+                      passwordInfo,
+                      password
+                    );
+                  } catch (syncErr: any) {
+                    throw new Error(
+                      "Failed to compute SRP hash: " +
+                        (syncErr.message || "Unknown error")
+                    );
+                  }
+                }
+              } else {
+                throw new Error(
+                  "SRP computation not available. Please ensure gramjs is properly installed. Error: " +
+                    (importErr.message || "Unknown")
+                );
+              }
+            }
+
+            if (!inputCheckPasswordSRP) {
+              throw new Error("Failed to compute SRP password hash");
+            }
+
+            // Gunakan InputCheckPasswordSRP untuk CheckPassword (sesuai dokumentasi gramjs)
+            me = await client.invoke(
+              new Api.auth.CheckPassword({
+                password: inputCheckPasswordSRP,
+              })
+            );
+            // Password berhasil, lanjutkan proses (me sudah di-set di atas)
+          } catch (pwdErr: any) {
+            if (pwdErr.errorMessage === "PASSWORD_HASH_INVALID") {
+              throw new Error("PASSWORD_INVALID");
+            }
+            throw pwdErr;
+          }
+        } else {
+          // Jika password belum dikirim, throw error untuk minta password
+          throw new Error("SESSION_PASSWORD_NEEDED");
+        }
+      } else {
+        throw err;
+      }
     }
 
-    const sessionString = client.session.save();
-    const isProduction = process.env.NODE_ENV === "production";
-    cookieStore.set("tg_session", sessionString as unknown as string, {
-      httpOnly: true,
-      secure: isProduction, // HTTPS required in production
-      sameSite: isProduction ? "none" : "lax", // "none" for cross-site in production
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    });
-    cookieStore.delete("tg_phone_hash" as unknown as string);
+    const finalSessionString = client.session.save();
 
-    // Save session ke database
+    // Save session ke database - WAJIB berhasil untuk user bisa akses dashboard
     try {
       const me = await client.getMe();
       const telegramUserId = me?.id ? BigInt(me.id.toString()) : null;
 
-      if (telegramUserId) {
-        await prisma.user.upsert({
-          where: { telegramUserId: telegramUserId },
-          update: {
-            session: sessionString as unknown as string,
-            phoneNumber: phoneNumber,
-          },
-          create: {
-            telegramUserId: telegramUserId,
-            session: sessionString as unknown as string,
-            phoneNumber: phoneNumber,
-          },
-        });
-        console.log("✅ Session saved to database");
+      if (!telegramUserId) {
+        console.error("⚠️ Failed to get telegramUserId from client");
+        throw new Error("Failed to get user ID from Telegram");
       }
+
+      console.log(
+        `[startClient] Saving user to database: telegramUserId=${telegramUserId}, phoneNumber=${phoneNumber}`
+      );
+
+      const user = await prisma.user.upsert({
+        where: { telegramUserId: telegramUserId },
+        update: {
+          session: finalSessionString as unknown as string,
+          phoneNumber: phoneNumber,
+        },
+        create: {
+          telegramUserId: telegramUserId,
+          session: finalSessionString as unknown as string,
+          phoneNumber: phoneNumber,
+        },
+      });
+
+      console.log(
+        `✅ User saved/updated in database: id=${user.id}, telegramUserId=${telegramUserId}`
+      );
     } catch (err) {
-      console.error("⚠️ Failed to save session to database:", err);
-      // Jangan throw error, karena login sudah berhasil
+      console.error("❌ CRITICAL: Failed to save session to database:", err);
+      // Throw error karena user harus ada di database untuk bisa akses dashboard
+      throw new Error(
+        `Failed to save user to database: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
 
     console.log("✅ Logged in successfully!");
@@ -296,7 +360,7 @@ export async function startClient(params: {
     //
     // Untuk start userbot, jalankan: `bun run bot` atau `bun run bot:dev`
 
-    return { sessionString: sessionString as unknown as string };
+    return { sessionString: finalSessionString as unknown as string };
   } catch (err: any) {
     if (err.errorMessage === "PHONE_CODE_EXPIRED") {
       console.error("❌ Code expired. Ask for a new one.");
@@ -311,23 +375,21 @@ export async function startClient(params: {
 
 /**
  * Logout and clear session
+ * Session string harus dikirim dari client untuk stop userbot
  */
-export async function logoutClient() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
-
+export async function logoutClient(sessionString?: string) {
   // Stop userbot jika running
-  if (sessionCookie) {
+  if (sessionString) {
     try {
       const { stopUserbot } = await import("./userbot");
-      await stopUserbot(sessionCookie);
+      await stopUserbot(sessionString);
       console.log("🛑 Userbot stopped");
     } catch (err) {
       console.error("Error stopping userbot:", err);
     }
   }
 
-  cookieStore.delete("tg_session");
-  cookieStore.delete("tg_phone_hash");
-  console.log("🚪 Logout successful — session deleted.");
+  console.log(
+    "🚪 Logout successful — session should be cleared from localStorage."
+  );
 }

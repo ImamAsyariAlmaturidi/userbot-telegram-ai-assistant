@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const session = req.cookies.get("tg_session");
 
   // Skip middleware untuk static files dan API routes
   if (
@@ -23,19 +22,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // 👇 Kalau belum login dan buka route yang bukan public, arahkan ke /login
-  if (!session && !isPublicRoute) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  // 👇 Kalau sudah login tapi buka /login, arahkan ke dashboard
-  if (session && pathname.startsWith("/login")) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
+  // Middleware tidak lagi cek cookie karena menggunakan localStorage
+  // Biarkan client-side (dashboard/page.tsx) yang handle redirect berdasarkan localStorage session
+  // Dashboard akan check localStorage session dan redirect ke login jika tidak ada/tidak valid
 
   return NextResponse.next();
 }
