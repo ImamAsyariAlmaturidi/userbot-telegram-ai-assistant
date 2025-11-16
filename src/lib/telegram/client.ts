@@ -11,16 +11,28 @@ export function createTelegramClient(
   clientConfig?: ClientConfig
 ): TelegramClient {
   const {
-    connectionRetries = 3,
-    retryDelay = 500,
-    requestRetries = 2,
+    connectionRetries = 5, // Increase retries for better reliability
+    retryDelay = 1000, // Increase delay to 1 second
+    requestRetries = 3, // Increase request retries
     autoReconnect = true,
     useWSS = true,
     useIPV6 = false,
     testServers = false,
   } = clientConfig || {};
 
-  const session = new StringSession(config.sessionString || "");
+  // Validasi session string sebelum membuat StringSession
+  const sessionString = config.sessionString || "";
+  if (
+    !sessionString ||
+    typeof sessionString !== "string" ||
+    sessionString.trim().length < 10
+  ) {
+    throw new Error(
+      "Invalid session string format. Session must be a non-empty string with valid format."
+    );
+  }
+
+  const session = new StringSession(sessionString);
   const client = new TelegramClient(session, config.apiId, config.apiHash, {
     connectionRetries,
     retryDelay,

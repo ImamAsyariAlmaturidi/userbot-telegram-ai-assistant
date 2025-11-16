@@ -14,6 +14,29 @@ export interface UserbotConfig {
 }
 
 /**
+ * Validasi session string format
+ */
+function isValidSessionString(
+  sessionString: string | null | undefined
+): boolean {
+  if (!sessionString || typeof sessionString !== "string") {
+    return false;
+  }
+
+  // Session string tidak boleh kosong
+  if (sessionString.trim().length === 0) {
+    return false;
+  }
+
+  // Session string Telegram biasanya panjang (minimal 10 karakter)
+  if (sessionString.trim().length < 10) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Start the Telegram userbot
  */
 export async function startUserbot(
@@ -23,6 +46,13 @@ export async function startUserbot(
 
   if (!sessionString) {
     throw new Error("Session string is required. Please login first.");
+  }
+
+  // Validasi format session string sebelum membuat client
+  if (!isValidSessionString(sessionString)) {
+    throw new Error(
+      "Invalid session string format. Session must be a non-empty string with valid format."
+    );
   }
 
   // Check if already running
