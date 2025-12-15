@@ -5,6 +5,7 @@ import {
   generateEmbedding,
   embeddingToVectorString,
 } from "@/lib/ai/embeddings";
+import { checkAuthStatus } from "@/lib/telegram/auth";
 
 // GET all knowledge sources for a user
 export async function GET(req: NextRequest) {
@@ -21,25 +22,33 @@ export async function GET(req: NextRequest) {
 
     const userId = BigInt(parseInt(telegram_user_id, 10));
 
-    // Get session from cookie (required)
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
+    // Get session from Authorization header or cookie
+    const authHeader = req.headers.get("authorization");
+    let sessionString = "";
 
-    if (!sessionCookie) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      sessionString = authHeader.split(" ")[1];
+    } else {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get("tg_session");
+      sessionString = sessionCookie?.value ?? "";
+    }
+
+    if (!sessionString) {
       return NextResponse.json(
         { error: "Session is required. Please login first." },
         { status: 401 }
       );
     }
 
-    // Verify user exists and session matches
-    const user = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { id: true, session: true },
-    });
+    // Verify session is valid using the auth utility
+    const { isAuthorized } = await checkAuthStatus(sessionString);
 
-    if (!user || user.session !== sessionCookie) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: "Session expired or invalid. Please login again." },
+        { status: 401 }
+      );
     }
 
     // Get all knowledge sources
@@ -71,7 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { telegram_user_id, content } = body;
+    const { telegram_user_id, content, sessionString: requestSession } = body;
 
     if (!telegram_user_id) {
       return NextResponse.json(
@@ -89,25 +98,33 @@ export async function POST(req: NextRequest) {
 
     const userId = BigInt(parseInt(telegram_user_id, 10));
 
-    // Get session from cookie (required)
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("tg_session")?.value ?? "";
+    // Get session from request body, Authorization header, or cookie
+    const authHeader = req.headers.get("authorization");
+    let sessionString = requestSession || "";
 
-    if (!sessionCookie) {
+    if (!sessionString && authHeader && authHeader.startsWith("Bearer ")) {
+      sessionString = authHeader.split(" ")[1];
+    } else if (!sessionString) {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get("tg_session");
+      sessionString = sessionCookie?.value ?? "";
+    }
+
+    if (!sessionString) {
       return NextResponse.json(
         { error: "Session is required. Please login first." },
         { status: 401 }
       );
     }
 
-    // Verify user exists and session matches
-    const user = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { id: true, session: true },
-    });
+    // Verify session is valid using the auth utility
+    const { isAuthorized } = await checkAuthStatus(sessionString);
 
-    if (!user || user.session !== sessionCookie) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: "Session expired or invalid. Please login again." },
+        { status: 401 }
+      );
     }
 
     // Generate embeddings for content

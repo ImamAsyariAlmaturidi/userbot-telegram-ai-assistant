@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma"; // PASTIKAN pakai prisma singleton
 import { cookies } from "next/headers";
+import { checkAuthStatus } from "@/lib/telegram/auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,24 +32,33 @@ export async function DELETE(
 
     const userId = BigInt(telegram_user_id);
 
-    // cookieStore tidak perlu await
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("tg_session")?.value || "";
+    // Get session from Authorization header or cookie
+    const authHeader = req.headers.get("authorization");
+    let sessionString = "";
 
-    if (!sessionCookie) {
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      sessionString = authHeader.split(" ")[1];
+    } else {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get("tg_session");
+      sessionString = sessionCookie?.value ?? "";
+    }
+
+    if (!sessionString) {
       return NextResponse.json(
         { error: "Session is required. Please login first." },
         { status: 401 }
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { telegramUserId: userId },
-      select: { session: true },
-    });
+    // Verify session is valid using the auth utility
+    const { isAuthorized } = await checkAuthStatus(sessionString);
 
-    if (!user || user.session !== sessionCookie) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (!isAuthorized) {
+      return NextResponse.json(
+        { error: "Session expired or invalid. Please login again." },
+        { status: 401 }
+      );
     }
 
     await prisma.knowledgeSource.delete({
